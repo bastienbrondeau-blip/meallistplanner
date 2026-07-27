@@ -483,6 +483,180 @@ function TabButton({
   );
 }
 
+function StoreCart({
+  ingredients,
+  choices,
+}: {
+  ingredients: Ingredient[];
+  choices: Choices;
+}) {
+  const [store, setStore] = useState<Store | null>(null);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
+
+  const items = useMemo(
+    () =>
+      ingredients.map((ing) => {
+        const idx = choices[ing.name] ?? 0;
+        const opt = ing.options[idx];
+        return {
+          key: ing.name,
+          query: `${ing.name}`,
+          label: `${ing.quantity} ${ing.name}`,
+          option: opt?.label ?? "",
+          price: opt?.price ?? 0,
+        };
+      }),
+    [ingredients, choices],
+  );
+
+  const pickStore = (s: Store) => {
+    setStore(s);
+    setAdded(new Set());
+  };
+
+  const openOne = (query: string, key: string) => {
+    if (!store) return;
+    window.open(store.search(query), "_blank", "noopener,noreferrer");
+    setAdded((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
+
+  const openAll = () => {
+    if (!store) return;
+    const remaining = items.filter((i) => !added.has(i.key));
+    remaining.forEach((it, idx) => {
+      setTimeout(() => {
+        window.open(store.search(it.query), "_blank", "noopener,noreferrer");
+      }, idx * 250);
+    });
+    setAdded(new Set(items.map((i) => i.key)));
+  };
+
+  const copyList = async () => {
+    const text = items.map((i) => `• ${i.label} (${i.option})`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
+  };
+
+  if (!store) {
+    return (
+      <div className="mt-4">
+        <p className="mb-2 text-sm font-semibold text-slate-700">
+          Envoyer ta liste dans un panier :
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {STORES.map((s) => (
+            <button
+              key={s.name}
+              onClick={() => pickStore(s)}
+              className={`flex items-center justify-center rounded-xl px-3 py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] ${s.color}`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          Chaque produit s'ouvrira dans le magasin choisi, prêt à ajouter au panier.
+        </p>
+      </div>
+    );
+  }
+
+  const done = added.size;
+  const total = items.length;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Panier
+          </p>
+          <p className="text-base font-bold text-slate-900">{store.name}</p>
+        </div>
+        <button
+          onClick={() => setStore(null)}
+          className="text-xs text-slate-400 hover:text-slate-700"
+        >
+          Changer
+        </button>
+      </div>
+
+      <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${total ? (done / total) * 100 : 0}%` }}
+        />
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        {done}/{total} produits envoyés au panier
+      </p>
+
+      <ul className="space-y-2">
+        {items.map((it) => {
+          const isAdded = added.has(it.key);
+          return (
+            <li
+              key={it.key}
+              className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition ${
+                isAdded ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="min-w-0">
+                <p
+                  className={`truncate text-sm font-medium ${
+                    isAdded ? "text-emerald-900 line-through decoration-emerald-400" : "text-slate-800"
+                  }`}
+                >
+                  {it.label}
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {it.option} · {it.price.toFixed(2)}€
+                </p>
+              </div>
+              <button
+                onClick={() => openOne(it.query, it.key)}
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold shadow-sm transition ${
+                  isAdded
+                    ? "bg-white text-emerald-700 hover:bg-emerald-100"
+                    : `${store.color} text-white`
+                }`}
+              >
+                {isAdded ? "Rouvrir" : "Ajouter"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          onClick={openAll}
+          className={`flex-1 rounded-xl py-3 text-sm font-semibold text-white shadow-md ${store.color}`}
+        >
+          🛒 Tout envoyer sur {store.name}
+        </button>
+        <button
+          onClick={copyList}
+          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          {copied ? "✓ Copié" : "Copier la liste"}
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+        Astuce : autorise les pop-ups pour ouvrir tous les produits d'un coup. Les magasins n'autorisent pas l'ajout automatique dans leur panier — chaque produit s'ouvre pré-recherché, il suffit de cliquer « Ajouter » sur leur site.
+      </p>
+    </div>
+  );
+}
+
 function HistoryView({
   history,
   onRestore,
