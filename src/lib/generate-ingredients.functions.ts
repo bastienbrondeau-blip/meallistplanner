@@ -6,6 +6,19 @@ export type Ingredient = {
   options: { label: string; price: number }[];
 };
 
+export type RecipeInfo = {
+  meal: string;
+  title: string;
+  source: string;
+  sourceUrl: string;
+  summary: string;
+};
+
+export type GenerateResult = {
+  ingredients: Ingredient[];
+  recipes: RecipeInfo[];
+};
+
 export const generateIngredients = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => {
     const d = data as { meals?: unknown };
@@ -14,33 +27,44 @@ export const generateIngredients = createServerFn({ method: "POST" })
     if (meals.length === 0) throw new Error("At least one meal is required");
     return { meals };
   })
-  .handler(async ({ data }): Promise<{ ingredients: Ingredient[] }> => {
+  .handler(async ({ data }): Promise<GenerateResult> => {
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
 
-    const systemPrompt = `Tu es un assistant qui génère des listes d'ingrédients de courses en français.
-Pour une liste de repas donnée, retourne UNIQUEMENT un JSON valide de cette forme:
+    const systemPrompt = `Tu es un chef français expert en cuisine et courses.
+Pour une liste de repas, retourne UNIQUEMENT un JSON valide de cette forme:
 {
+  "recipes": [
+    {
+      "meal": "pâtes carbonara",
+      "title": "Vraies pâtes carbonara à l'italienne",
+      "source": "Marmiton",
+      "sourceUrl": "https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_23223.aspx",
+      "summary": "Recette traditionnelle avec guanciale, pecorino, jaunes d'œufs et poivre."
+    }
+  ],
   "ingredients": [
     {
       "name": "Pâtes",
       "quantity": "200g",
       "options": [
         { "label": "Pâtes standard", "price": 1 },
-        { "label": "Pâtes bio", "price": 2.5 },
-        { "label": "Pâtes fraîches", "price": 4 }
+        { "label": "Pâtes milieu de gamme", "price": 2.5 },
+        { "label": "Pâtes bio artisanales", "price": 4 }
       ]
     }
   ]
 }
-Règles:
+Règles STRICTES:
+- Pour CHAQUE repas demandé, propose UNE vraie recette de référence issue d'un site français reconnu (Marmiton, 750g, Cuisine AZ, Journal des Femmes, Ricardo, Cuisine Actuelle, Papilles et Pupilles, Chef Simon).
+- L'URL DOIT être une vraie URL plausible du site cité (ex: https://www.marmiton.org/recettes/...). N'invente pas d'URL bizarres.
 - Regroupe les ingrédients identiques entre plusieurs repas (additionne les quantités).
-- Chaque ingrédient DOIT avoir exactement 3 options croissantes en prix et qualité (standard, milieu de gamme, premium/bio).
-- Prix réalistes en euros (nombre décimal).
-- Inclure sel/poivre/huile SEULEMENT si nécessaire, avec des options réalistes.
+- Chaque ingrédient a EXACTEMENT 3 options croissantes en prix/qualité.
+- Prix réalistes en euros France 2025.
+- Sel/poivre/huile SEULEMENT si vraiment central.
 - Retourne UNIQUEMENT le JSON, aucun texte avant ou après.`;
 
-    const userPrompt = `Repas de la semaine: ${data.meals.join(", ")}. Génère la liste d'ingrédients.`;
+    const userPrompt = `Repas: ${data.meals.join(", ")}. Génère les recettes de référence et la liste de courses.`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -67,7 +91,7 @@ Règles:
 
     const json = await res.json();
     const content: string = json.choices?.[0]?.message?.content ?? "{}";
-    let parsed: { ingredients?: Ingredient[] };
+    let parsed: { ingredients?: Ingredient[]; recipes?: RecipeInfo[] };
     try {
       parsed = JSON.parse(content);
     } catch {
@@ -81,5 +105,12 @@ Règles:
         price: Number(o.price ?? 0),
       })),
     }));
-    return { ingredients };
+    const recipes = (parsed.recipes ?? []).map((r) => ({
+      meal: String(r.meal ?? ""),
+      title: String(r.title ?? ""),
+      source: String(r.source ?? ""),
+      sourceUrl: String(r.sourceUrl ?? ""),
+      summary: String(r.summary ?? ""),
+    }));
+    return { ingredients, recipes };
   });
