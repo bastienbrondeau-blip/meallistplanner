@@ -431,19 +431,8 @@ function MealList() {
                   <span className="text-2xl font-bold">{total.toFixed(2)}€</span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {STORES.map((s) => (
-                    <a
-                      key={s.name}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer sponsored"
-                      className={`flex items-center justify-center rounded-xl px-3 py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] ${s.color}`}
-                    >
-                      {s.name}
-                    </a>
-                  ))}
-                </div>
+                <StoreCart ingredients={ingredients} choices={choices} />
+
 
                 <button
                   onClick={saveToHistory}
