@@ -50,15 +50,33 @@ type WorkspaceState = {
 const STORAGE_KEY = "meallist-workspace-v2";
 const HISTORY_KEY = "meallist-history-v2";
 
-const STORES = [
-  { name: "Carrefour", color: "bg-[#004E9F] hover:bg-[#003a75]", url: "https://www.carrefour.fr/" },
-  { name: "Leclerc", color: "bg-[#0066B3] hover:bg-[#00518f]", url: "https://www.leclercdrive.fr/" },
+type Store = {
+  name: string;
+  color: string;
+  search: (q: string) => string;
+};
+
+const STORES: Store[] = [
+  {
+    name: "Carrefour",
+    color: "bg-[#004E9F] hover:bg-[#003a75]",
+    search: (q) => `https://www.carrefour.fr/s?q=${encodeURIComponent(q)}`,
+  },
+  {
+    name: "Leclerc",
+    color: "bg-[#0066B3] hover:bg-[#00518f]",
+    search: (q) => `https://www.e.leclerc/recherche?q=${encodeURIComponent(q)}`,
+  },
   {
     name: "Amazon Fresh",
     color: "bg-[#FF9900] hover:bg-[#e08700]",
-    url: "https://www.amazon.fr/alm/storefront?almBrandId=QW1hem9uIEZyZXNo",
+    search: (q) => `https://www.amazon.fr/s?i=amazonfresh&k=${encodeURIComponent(q)}`,
   },
-  { name: "Intermarché", color: "bg-[#E30613] hover:bg-[#b8050f]", url: "https://www.intermarche.com/" },
+  {
+    name: "Intermarché",
+    color: "bg-[#E30613] hover:bg-[#b8050f]",
+    search: (q) => `https://www.intermarche.com/recherche?q=${encodeURIComponent(q)}`,
+  },
 ];
 
 const SUGGESTIONS = [
