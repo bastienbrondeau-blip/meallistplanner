@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "MealList — Cuisine libre & courses malines" },
+      { name: "description", content: "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "MealList — Cuisine libre & courses malines" },
+      { property: "og:description", content: "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "MealList — Cuisine libre & courses malines" },
+      { name: "twitter:description", content: "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/p0TR7Ahc0PNn2IoLIT1lu5QUBY63/social-images/social-1785252564068-Blue_and_Beige_Modern_Social_Media_Marketing_Presentation.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/p0TR7Ahc0PNn2IoLIT1lu5QUBY63/social-images/social-1785252564068-Blue_and_Beige_Modern_Social_Media_Marketing_Presentation.webp" },
     ],
     links: [
       {

@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "MealList — Cuisine libre & courses malines" },
       {
         property: "og:description",
-        content: "Compose tes repas, découvre de vraies recettes sourcées, génère ta liste.",
+        content: "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
