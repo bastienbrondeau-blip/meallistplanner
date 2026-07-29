@@ -6,20 +6,22 @@ import {
   type Ingredient,
   type RecipeInfo,
 } from "@/lib/generate-ingredients.functions";
+import { suggestMeals, type MealSuggestion, type Profile } from "@/lib/suggest-meals.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MealList — Cuisine libre & courses malines" },
+      { title: "MealList — Ton assistant culinaire IA" },
       {
         name: "description",
         content:
-          "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil.",
+          "MealList suggère des repas selon tes goûts et génère ta liste de courses intelligente en quelques secondes.",
       },
-      { property: "og:title", content: "MealList — Cuisine libre & courses malines" },
+      { property: "og:title", content: "MealList — Ton assistant culinaire IA" },
       {
         property: "og:description",
-        content: "Compose tes repas, découvre de vraies recettes sourcées et génère ta liste de courses en un clin d'œil.",
+        content:
+          "MealList suggère des repas selon tes goûts et génère ta liste de courses intelligente en quelques secondes.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -29,6 +31,8 @@ export const Route = createFileRoute("/")({
 });
 
 type Choices = Record<string, number>;
+
+type Tab = "suggest" | "cook";
 
 type HistoryEntry = {
   id: string;
@@ -40,161 +44,182 @@ type HistoryEntry = {
   total: number;
 };
 
-type WorkspaceState = {
-  meals: string[];
-  ingredients: Ingredient[];
-  recipes: RecipeInfo[];
-  choices: Choices;
+const PROFILE_KEY = "meallist-profile-v1";
+const MEALS_KEY = "meallist-meals-v1";
+const WORK_KEY = "meallist-work-v1";
+const HISTORY_KEY = "meallist-history-v1";
+
+const DEFAULT_PROFILE: Profile = {
+  goal: "Sans objectif",
+  allergies: "Aucune",
+  diet: "Omnivore",
+  budget: "Moyen",
+  time: "Pas d'importance",
+  cuisines: [],
 };
 
-const STORAGE_KEY = "meallist-workspace-v2";
-const HISTORY_KEY = "meallist-history-v2";
+const GOALS = ["Perte de poids", "Prise de muscle", "Maintenir", "Sans objectif"];
+const DIETS = ["Omnivore", "Végétarien", "Végan", "Sans gluten", "Autre"];
+const BUDGETS = ["Cheap (<5€)", "Moyen (5-15€)", "Premium (>15€)"];
+const TIMES = ["5 min", "15 min", "30 min", "1h+", "Pas d'importance"];
+const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine", "Mixte"];
 
-type Store = {
-  name: string;
-  color: string;
-  search: (q: string) => string;
-};
-
-const STORES: Store[] = [
+const STORES = [
   {
     name: "Carrefour",
-    color: "bg-[#004E9F] hover:bg-[#003a75]",
-    search: (q) => `https://www.carrefour.fr/s?q=${encodeURIComponent(q)}`,
+    accent: "from-[#004E9F] to-[#0069c9]",
+    search: (q: string) => `https://www.carrefour.fr/s?q=${encodeURIComponent(q)}`,
   },
   {
     name: "Leclerc",
-    color: "bg-[#0066B3] hover:bg-[#00518f]",
-    search: (q) => `https://www.e.leclerc/recherche?q=${encodeURIComponent(q)}`,
+    accent: "from-[#0066B3] to-[#0088dd]",
+    search: (q: string) => `https://www.e.leclerc/recherche?q=${encodeURIComponent(q)}`,
   },
   {
     name: "Amazon Fresh",
-    color: "bg-[#FF9900] hover:bg-[#e08700]",
-    search: (q) => `https://www.amazon.fr/s?i=amazonfresh&k=${encodeURIComponent(q)}`,
+    accent: "from-[#FF9900] to-[#ffb84d]",
+    search: (q: string) => `https://www.amazon.fr/s?i=amazonfresh&k=${encodeURIComponent(q)}`,
   },
   {
     name: "Intermarché",
-    color: "bg-[#E30613] hover:bg-[#b8050f]",
-    search: (q) => `https://www.intermarche.com/recherche?q=${encodeURIComponent(q)}`,
+    accent: "from-[#E30613] to-[#ff3a48]",
+    search: (q: string) => `https://www.intermarche.com/recherche?q=${encodeURIComponent(q)}`,
   },
 ];
 
-const SUGGESTIONS = [
-  "Pâtes carbonara",
-  "Poulet rôti",
-  "Salade César",
-  "Curry de légumes",
-  "Saumon teriyaki",
-  "Tacos au bœuf",
-  "Ratatouille",
-  "Risotto champignons",
-];
-
-type Tab = "repas" | "recettes" | "courses" | "panier" | "historique";
-
-const NAV: {
-  id: Tab;
-  label: string;
-  icon: string;
-  desc: string;
-}[] = [
-  { id: "repas", label: "Repas", icon: "🍽️", desc: "Compose ta semaine" },
-  { id: "recettes", label: "Recettes", icon: "📖", desc: "Sources vérifiées" },
-  { id: "courses", label: "Liste", icon: "🧾", desc: "Qualité & prix" },
-  { id: "panier", label: "Panier", icon: "🛒", desc: "Envoi en magasin" },
-  { id: "historique", label: "Historique", icon: "🗂️", desc: "Listes passées" },
+const QUICK_MEALS: MealSuggestion[] = [
+  { name: "Pâtes carbonara", emoji: "🍝", description: "Italien classique, ~20min" },
+  { name: "Poulet rôti", emoji: "🍗", description: "Familial, ~1h au four" },
+  { name: "Salade César", emoji: "🥗", description: "Fraîche, ~15min" },
+  { name: "Curry de légumes", emoji: "🍛", description: "Épicé, végétarien, ~30min" },
+  { name: "Saumon teriyaki", emoji: "🐟", description: "Asiatique, ~20min" },
+  { name: "Tacos au bœuf", emoji: "🌮", description: "Mexicain, ~25min" },
 ];
 
 function MealList() {
-  const [tab, setTab] = useState<Tab>("repas");
+  const [tab, setTab] = useState<Tab>("suggest");
+  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [profileSet, setProfileSet] = useState(false);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [meals, setMeals] = useState<string[]>([]);
-  const [mealInput, setMealInput] = useState("");
+  const [suggestions, setSuggestions] = useState<MealSuggestion[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [recipes, setRecipes] = useState<RecipeInfo[]>([]);
   const [choices, setChoices] = useState<Choices>({});
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const [openRecipe, setOpenRecipe] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const generate = useServerFn(generateIngredients);
+  const suggest = useServerFn(suggestMeals);
 
+  // Hydrate
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const s = JSON.parse(raw) as Partial<WorkspaceState>;
-        if (Array.isArray(s.meals)) setMeals(s.meals);
-        if (Array.isArray(s.ingredients)) setIngredients(s.ingredients);
-        if (Array.isArray(s.recipes)) setRecipes(s.recipes);
-        if (s.choices) setChoices(s.choices);
+      const rawP = localStorage.getItem(PROFILE_KEY);
+      if (rawP) {
+        setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(rawP) });
+        setProfileSet(true);
+      } else {
+        setShowQuestionnaire(true);
+      }
+      const rawM = localStorage.getItem(MEALS_KEY);
+      if (rawM) setMeals(JSON.parse(rawM));
+      const rawW = localStorage.getItem(WORK_KEY);
+      if (rawW) {
+        const w = JSON.parse(rawW);
+        if (w.ingredients) setIngredients(w.ingredients);
+        if (w.recipes) setRecipes(w.recipes);
+        if (w.choices) setChoices(w.choices);
       }
       const rawH = localStorage.getItem(HISTORY_KEY);
-      if (rawH) {
-        const h = JSON.parse(rawH);
-        if (Array.isArray(h)) setHistory(h);
-      }
+      if (rawH) setHistory(JSON.parse(rawH));
     } catch {}
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ meals, ingredients, recipes, choices } satisfies WorkspaceState),
-    );
-  }, [meals, ingredients, recipes, choices, hydrated]);
+    localStorage.setItem(MEALS_KEY, JSON.stringify(meals));
+  }, [meals, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(WORK_KEY, JSON.stringify({ ingredients, recipes, choices }));
+  }, [ingredients, recipes, choices, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   }, [history, hydrated]);
 
-  const addMeal = (value?: string) => {
-    const v = (value ?? mealInput).trim();
-    if (!v) return;
-    if (meals.some((m) => m.toLowerCase() === v.toLowerCase())) {
-      setMealInput("");
-      return;
-    }
-    setMeals((m) => [...m, v]);
-    setMealInput("");
-  };
+  // Fetch suggestions when profile is set / changed
+  useEffect(() => {
+    if (!hydrated || !profileSet || showQuestionnaire) return;
+    let cancelled = false;
+    setSuggestLoading(true);
+    setSuggestError(null);
+    suggest({ data: { profile } })
+      .then((res) => {
+        if (!cancelled) setSuggestions(res.suggestions);
+      })
+      .catch((e) => {
+        if (!cancelled) setSuggestError(e instanceof Error ? e.message : "Erreur");
+      })
+      .finally(() => {
+        if (!cancelled) setSuggestLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, profileSet, showQuestionnaire, profile, suggest]);
 
+  const addMeal = (v: string) => {
+    const s = v.trim();
+    if (!s) return;
+    if (meals.some((m) => m.toLowerCase() === s.toLowerCase())) return;
+    setMeals((m) => [...m, s]);
+  };
   const removeMeal = (i: number) => setMeals((m) => m.filter((_, idx) => idx !== i));
 
   const total = useMemo(
     () =>
-      ingredients.reduce((sum, ing) => {
+      ingredients.reduce((s, ing) => {
         const idx = choices[ing.name] ?? 0;
-        return sum + (ing.options[idx]?.price ?? 0);
+        return s + (ing.options[idx]?.price ?? 0);
       }, 0),
     [ingredients, choices],
   );
 
+  const currentStep = useMemo(() => {
+    if (meals.length === 0) return 1;
+    if (ingredients.length === 0) return 2;
+    return 3;
+  }, [meals.length, ingredients.length]);
+
   const handleGenerate = async () => {
     if (meals.length === 0) return;
-    setError(null);
-    setLoading(true);
+    setGenError(null);
+    setGenLoading(true);
     try {
       const res = await generate({ data: { meals } });
       setIngredients(res.ingredients);
       setRecipes(res.recipes);
-      const initial: Choices = {};
-      res.ingredients.forEach((i) => (initial[i.name] = 0));
-      setChoices(initial);
-      setTab("recettes");
+      const init: Choices = {};
+      res.ingredients.forEach((i) => (init[i.name] = 0));
+      setChoices(init);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setGenError(e instanceof Error ? e.message : "Erreur");
     } finally {
-      setLoading(false);
+      setGenLoading(false);
     }
   };
 
-  const saveToHistory = () => {
+  const saveHistory = () => {
     if (ingredients.length === 0) return;
     const entry: HistoryEntry = {
       id: crypto.randomUUID(),
@@ -208,627 +233,883 @@ function MealList() {
     setHistory((h) => [entry, ...h].slice(0, 30));
   };
 
-  const restoreEntry = (entry: HistoryEntry) => {
-    setMeals(entry.meals);
-    setIngredients(entry.ingredients);
-    setRecipes(entry.recipes);
-    setChoices(entry.choices);
-    setTab("courses");
-  };
-
-  const deleteEntry = (id: string) => setHistory((h) => h.filter((e) => e.id !== id));
-
-  const clearWorkspace = () => {
-    setMeals([]);
-    setIngredients([]);
-    setRecipes([]);
-    setChoices({});
-    setError(null);
-  };
-
-  const hasList = ingredients.length > 0;
-  const counts: Record<Tab, number> = {
-    repas: meals.length,
-    recettes: recipes.length,
-    courses: ingredients.length,
-    panier: ingredients.length,
-    historique: history.length,
-  };
-
-  const goTab = (t: Tab) => {
-    setTab(t);
-    setSidebarOpen(false);
-  };
+  const goToCook = () => setTab("cook");
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
-            🛒
-          </div>
-          <div>
-            <p className="text-sm font-bold">MealList</p>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              {NAV.find((n) => n.id === tab)?.label}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setSidebarOpen((v) => !v)}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium"
-        >
-          ☰
-        </button>
-      </div>
+      {showQuestionnaire && (
+        <Questionnaire
+          initial={profile}
+          onSave={(p) => {
+            setProfile(p);
+            setProfileSet(true);
+            setShowQuestionnaire(false);
+            localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+          }}
+        />
+      )}
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside
-          className={`fixed inset-y-0 left-0 z-40 w-72 transform border-r border-slate-200 bg-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="flex h-full flex-col">
-            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-lg text-white shadow-sm">
-                🛒
-              </div>
-              <div>
-                <p className="text-base font-bold tracking-tight">MealList</p>
-                <p className="text-[11px] uppercase tracking-wider text-slate-400">
-                  Studio de courses
-                </p>
-              </div>
-            </div>
+      <Header tab={tab} setTab={setTab} onEditProfile={() => setShowQuestionnaire(true)} />
 
-            <nav className="flex-1 space-y-1 px-3 py-4">
-              {NAV.map((n) => {
-                const active = tab === n.id;
-                const count = counts[n.id];
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => goTab(n.id)}
-                    className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                      active
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${
-                        active ? "bg-white/10" : "bg-slate-100 group-hover:bg-white"
-                      }`}
-                    >
-                      {n.icon}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between">
-                        <span className="text-sm font-semibold">{n.label}</span>
-                        {count > 0 && (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              active
-                                ? "bg-white/15 text-white"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            {count}
-                          </span>
-                        )}
-                      </span>
-                      <span
-                        className={`block text-[11px] ${active ? "text-white/60" : "text-slate-400"}`}
-                      >
-                        {n.desc}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            {hasList && (
-              <div className="border-t border-slate-100 px-4 py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  Total estimé
-                </p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{total.toFixed(2)}€</p>
-                <p className="text-xs text-slate-500">
-                  {ingredients.length} produits · {meals.length} repas
-                </p>
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {sidebarOpen && (
-          <button
-            aria-label="Fermer le menu"
-            onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+      <main className="mx-auto max-w-5xl px-4 pb-24 pt-6 sm:px-8 sm:pt-10">
+        {tab === "suggest" ? (
+          <SuggestTab
+            profile={profile}
+            suggestions={suggestions}
+            loading={suggestLoading}
+            error={suggestError}
+            meals={meals}
+            addMeal={addMeal}
+            removeMeal={removeMeal}
+            onEditProfile={() => setShowQuestionnaire(true)}
+            onGoToCook={goToCook}
+          />
+        ) : (
+          <CookTab
+            meals={meals}
+            addMeal={addMeal}
+            removeMeal={removeMeal}
+            ingredients={ingredients}
+            recipes={recipes}
+            choices={choices}
+            setChoices={setChoices}
+            total={total}
+            genLoading={genLoading}
+            genError={genError}
+            onGenerate={handleGenerate}
+            onSaveHistory={saveHistory}
+            step={currentStep}
           />
         )}
+      </main>
 
-        {/* Main */}
-        <main className="min-h-screen flex-1">
-          <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-            <PageHeader
-              tab={tab}
-              onClear={clearWorkspace}
-              canClear={meals.length > 0 || ingredients.length > 0}
-            />
+      <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-400">
+        MealList — Ton assistant culinaire IA · Sauvegarde locale, sans compte.
+      </footer>
+    </div>
+  );
+}
 
-            {tab === "repas" && (
-              <RepasTab
-                meals={meals}
-                mealInput={mealInput}
-                setMealInput={setMealInput}
-                addMeal={addMeal}
-                removeMeal={removeMeal}
-                loading={loading}
-                error={error}
-                hasList={hasList}
-                onGenerate={handleGenerate}
-              />
-            )}
+/* ------------------------- Header ------------------------- */
 
-            {tab === "recettes" && (
-              <RecettesTab
-                recipes={recipes}
-                openRecipe={openRecipe}
-                setOpenRecipe={setOpenRecipe}
-                onGoRepas={() => setTab("repas")}
-                onGoCourses={() => setTab("courses")}
-                hasList={hasList}
-              />
-            )}
-
-            {tab === "courses" && (
-              <CoursesTab
-                ingredients={ingredients}
-                choices={choices}
-                setChoices={setChoices}
-                total={total}
-                onSave={saveToHistory}
-                onGoPanier={() => setTab("panier")}
-                onGoRepas={() => setTab("repas")}
-              />
-            )}
-
-            {tab === "panier" && (
-              <PanierTab
-                ingredients={ingredients}
-                choices={choices}
-                total={total}
-                onGoCourses={() => setTab("courses")}
-              />
-            )}
-
-            {tab === "historique" && (
-              <HistoryView
-                history={history}
-                onRestore={restoreEntry}
-                onDelete={deleteEntry}
-                onGoCuisine={() => setTab("repas")}
-              />
-            )}
-          </div>
-        </main>
+function Logo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)]">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M7 3v8a3 3 0 003 3v7M7 3v0M7 3H5M7 3h2M17 3c-1.5 0-3 1.5-3 5s1.5 4 3 4v9"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+      <div>
+        <p className="text-lg font-extrabold leading-none tracking-tight">MealList</p>
+        <p className="mt-1 text-[11px] font-medium text-slate-500">Ton assistant culinaire IA</p>
       </div>
     </div>
   );
 }
 
-function PageHeader({
+function Header({
   tab,
-  onClear,
-  canClear,
+  setTab,
+  onEditProfile,
 }: {
   tab: Tab;
-  onClear: () => void;
-  canClear: boolean;
+  setTab: (t: Tab) => void;
+  onEditProfile: () => void;
 }) {
-  const current = NAV.find((n) => n.id === tab)!;
   return (
-    <div className="mb-6 flex items-end justify-between border-b border-slate-200 pb-5">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-700">
-          {current.icon} {current.desc}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{current.label}</h1>
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
+        <Logo />
+        <div className="flex items-center gap-2">
+          <nav className="hidden rounded-full border border-slate-200 bg-slate-50 p-1 sm:flex">
+            <TabButton active={tab === "suggest"} onClick={() => setTab("suggest")}>
+              Qu'est-ce qu'on mange ?
+            </TabButton>
+            <TabButton active={tab === "cook"} onClick={() => setTab("cook")}>
+              Cuisine
+            </TabButton>
+          </nav>
+          <button
+            onClick={onEditProfile}
+            className="hidden shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700 sm:inline-flex"
+            title="Modifier mon profil"
+          >
+            ⚙︎ Profil
+          </button>
+        </div>
       </div>
-      {canClear && tab === "repas" && (
-        <button
-          onClick={onClear}
-          className="text-xs font-medium text-slate-400 hover:text-red-500"
-        >
-          Réinitialiser
-        </button>
-      )}
-    </div>
+      {/* Mobile tabs */}
+      <div className="flex gap-1 border-t border-slate-100 bg-white px-3 py-2 sm:hidden">
+        <TabButton active={tab === "suggest"} onClick={() => setTab("suggest")} full>
+          Suggestions
+        </TabButton>
+        <TabButton active={tab === "cook"} onClick={() => setTab("cook")} full>
+          Cuisine
+        </TabButton>
+      </div>
+    </header>
   );
 }
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+  full = false,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
   return (
-    <section
-      className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.04)] sm:p-6 ${className}`}
+    <button
+      onClick={onClick}
+      className={`${full ? "flex-1" : ""} rounded-full px-4 py-2 text-sm font-semibold transition ${
+        active
+          ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.08)]"
+          : "text-slate-500 hover:text-slate-800"
+      }`}
     >
       {children}
-    </section>
+    </button>
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  desc,
-  action,
+/* ------------------------- Questionnaire ------------------------- */
+
+function Questionnaire({
+  initial,
+  onSave,
 }: {
-  icon: string;
-  title: string;
-  desc: string;
-  action?: { label: string; onClick: () => void };
+  initial: Profile;
+  onSave: (p: Profile) => void;
 }) {
+  const [p, setP] = useState<Profile>(initial);
+  const [hasAllergies, setHasAllergies] = useState(
+    initial.allergies !== "Aucune" && initial.allergies !== "",
+  );
+
+  const toggleCuisine = (c: string) => {
+    setP((prev) => {
+      const set = new Set(prev.cuisines);
+      if (set.has(c)) set.delete(c);
+      else set.add(c);
+      return { ...prev, cuisines: [...set] };
+    });
+  };
+
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
-      <p className="text-4xl">{icon}</p>
-      <h2 className="mt-3 text-lg font-bold">{title}</h2>
-      <p className="mt-1 text-sm text-slate-500">{desc}</p>
-      {action && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+        <div className="mb-6">
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">
+            Profil culinaire
+          </p>
+          <h2 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">
+            Dis-nous en plus sur toi
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            L'IA adapte les suggestions à tes goûts. Modifiable à tout moment.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <Field label="Ton objectif ?">
+            <ChipGroup
+              options={GOALS}
+              value={p.goal}
+              onChange={(v) => setP((s) => ({ ...s, goal: v }))}
+            />
+          </Field>
+
+          <Field label="Allergies ou intolérances ?">
+            <div className="flex gap-2">
+              <Chip
+                active={!hasAllergies}
+                onClick={() => {
+                  setHasAllergies(false);
+                  setP((s) => ({ ...s, allergies: "Aucune" }));
+                }}
+              >
+                Non
+              </Chip>
+              <Chip active={hasAllergies} onClick={() => setHasAllergies(true)}>
+                Oui
+              </Chip>
+            </div>
+            {hasAllergies && (
+              <input
+                type="text"
+                value={p.allergies === "Aucune" ? "" : p.allergies}
+                onChange={(e) => setP((s) => ({ ...s, allergies: e.target.value }))}
+                placeholder="ex: gluten, arachides, lactose…"
+                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+            )}
+          </Field>
+
+          <Field label="Régime alimentaire">
+            <ChipGroup
+              options={DIETS}
+              value={p.diet}
+              onChange={(v) => setP((s) => ({ ...s, diet: v }))}
+            />
+          </Field>
+
+          <Field label="Budget moyen par repas">
+            <ChipGroup
+              options={BUDGETS}
+              value={p.budget}
+              onChange={(v) => setP((s) => ({ ...s, budget: v }))}
+            />
+          </Field>
+
+          <Field label="Temps de préparation max">
+            <ChipGroup
+              options={TIMES}
+              value={p.time}
+              onChange={(v) => setP((s) => ({ ...s, time: v }))}
+            />
+          </Field>
+
+          <Field label="Cuisines préférées (plusieurs possibles)">
+            <div className="flex flex-wrap gap-2">
+              {CUISINES.map((c) => (
+                <Chip key={c} active={p.cuisines.includes(c)} onClick={() => toggleCuisine(c)}>
+                  {c}
+                </Chip>
+              ))}
+            </div>
+          </Field>
+        </div>
+
         <button
-          onClick={action.onClick}
-          className="mt-5 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          onClick={() => onSave(p)}
+          className="mt-8 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_rgba(16,185,129,0.6)] transition hover:brightness-110 active:scale-[0.99]"
         >
-          {action.label}
+          Enregistrer mon profil
         </button>
-      )}
+      </div>
     </div>
   );
 }
 
-function RepasTab({
-  meals,
-  mealInput,
-  setMealInput,
-  addMeal,
-  removeMeal,
-  loading,
-  error,
-  hasList,
-  onGenerate,
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-semibold text-slate-700">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function ChipGroup({
+  options,
+  value,
+  onChange,
 }: {
-  meals: string[];
-  mealInput: string;
-  setMealInput: (v: string) => void;
-  addMeal: (v?: string) => void;
-  removeMeal: (i: number) => void;
-  loading: boolean;
-  error: string | null;
-  hasList: boolean;
-  onGenerate: () => void;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
-    <div className="space-y-5">
-      <Card>
-        <h2 className="text-base font-bold">Ajoute un repas</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Écris ce que tu veux manger cette semaine. Sans ordre imposé.
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <Chip key={o} active={value === o} onClick={() => onChange(o)}>
+          {o}
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+        active
+          ? "border-emerald-500 bg-emerald-50 text-emerald-800 shadow-[0_1px_0_rgba(16,185,129,0.15)]"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------- Suggest Tab ------------------------- */
+
+function SuggestTab({
+  profile,
+  suggestions,
+  loading,
+  error,
+  meals,
+  addMeal,
+  removeMeal,
+  onEditProfile,
+  onGoToCook,
+}: {
+  profile: Profile;
+  suggestions: MealSuggestion[];
+  loading: boolean;
+  error: string | null;
+  meals: string[];
+  addMeal: (v: string) => void;
+  removeMeal: (i: number) => void;
+  onEditProfile: () => void;
+  onGoToCook: () => void;
+}) {
+  const [input, setInput] = useState("");
+  const list = suggestions.length > 0 ? suggestions : QUICK_MEALS;
+
+  return (
+    <div className="space-y-8">
+      {/* Hero */}
+      <section>
+        <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">
+          Suggestions personnalisées
+        </p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Qu'est-ce qu'on mange&nbsp;?
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-500 sm:text-base">
+          L'IA te propose des repas adaptés à ton profil. Ajoute ce qui te tente puis lance la
+          génération de ta liste.
         </p>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <ProfilePill label={profile.goal} />
+          <ProfilePill label={profile.diet} />
+          <ProfilePill label={profile.budget} />
+          <ProfilePill label={profile.time} />
+          {profile.cuisines.slice(0, 2).map((c) => (
+            <ProfilePill key={c} label={c} />
+          ))}
+          <button
+            onClick={onEditProfile}
+            className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs font-semibold text-slate-500 hover:border-emerald-400 hover:text-emerald-700"
+          >
+            Modifier mon profil
+          </button>
+        </div>
+      </section>
+
+      {/* Suggestions grid */}
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-lg font-bold tracking-tight">Idées de repas pour toi</h2>
+          {loading && (
+            <span className="text-xs font-medium text-slate-400">L'IA cuisine…</span>
+          )}
+        </div>
+
+        {error && (
+          <div className="mb-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {loading && suggestions.length === 0
+            ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+            : list.map((s) => (
+                <MealCard
+                  key={s.name}
+                  suggestion={s}
+                  added={meals.some((m) => m.toLowerCase() === s.name.toLowerCase())}
+                  onAdd={() => addMeal(s.name)}
+                />
+              ))}
+        </div>
+      </section>
+
+      {/* Custom add */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:p-6">
+        <h2 className="text-base font-bold">Ajoute un autre repas</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Une envie précise&nbsp;? Écris-la directement.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
-            type="text"
-            value={mealInput}
-            onChange={(e) => setMealInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addMeal()}
-            placeholder="ex: pâtes carbonara, boeuf bourguignon…"
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addMeal(input);
+                setInput("");
+              }
+            }}
+            placeholder="ex: pâtes carbonara, poulet rôti…"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
           <button
-            onClick={() => addMeal()}
-            className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+            onClick={() => {
+              addMeal(input);
+              setInput("");
+            }}
+            className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-bold text-white shadow-[0_6px_16px_-6px_rgba(16,185,129,0.6)] transition hover:brightness-110 active:scale-[0.98]"
+          >
+            Ajouter
+          </button>
+        </div>
+      </section>
+
+      {/* Selected meals */}
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-lg font-bold tracking-tight">Ta sélection</h2>
+          <span className="text-xs font-medium text-slate-400">
+            {meals.length} repas
+          </span>
+        </div>
+
+        {meals.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-8 text-center text-sm text-slate-400">
+            Aucun repas sélectionné. Clique sur une suggestion ci-dessus.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {meals.map((m, i) => (
+              <SelectedMealCard key={i} name={m} onRemove={() => removeMeal(i)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* CTA */}
+      <button
+        disabled={meals.length === 0}
+        onClick={onGoToCook}
+        className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-5 text-base font-extrabold text-white shadow-[0_20px_40px_-15px_rgba(16,185,129,0.6)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M7 3v8a3 3 0 003 3v7M17 3c-1.5 0-3 1.5-3 5s1.5 4 3 4v9"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+        </svg>
+        Générer ma liste de courses
+        <span className="opacity-70 transition group-hover:translate-x-0.5">→</span>
+      </button>
+    </div>
+  );
+}
+
+function ProfilePill({ label }: { label: string }) {
+  return (
+    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+      {label}
+    </span>
+  );
+}
+
+function MealCard({
+  suggestion,
+  added,
+  onAdd,
+}: {
+  suggestion: MealSuggestion;
+  added: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-15px_rgba(15,23,42,0.15)]">
+      <div className="text-3xl">{suggestion.emoji}</div>
+      <h3 className="mt-3 text-base font-bold leading-tight tracking-tight">
+        {suggestion.name}
+      </h3>
+      <p className="mt-1 line-clamp-2 text-xs text-slate-500">{suggestion.description}</p>
+      <button
+        onClick={onAdd}
+        disabled={added}
+        className={`mt-4 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+          added
+            ? "bg-emerald-50 text-emerald-700"
+            : "bg-slate-900 text-white hover:bg-emerald-600"
+        }`}
+      >
+        {added ? "✓ Ajouté" : "+ Ajouter ce repas"}
+      </button>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="h-8 w-8 animate-pulse rounded bg-slate-100" />
+      <div className="mt-3 h-4 w-3/4 animate-pulse rounded bg-slate-100" />
+      <div className="mt-2 h-3 w-full animate-pulse rounded bg-slate-100" />
+      <div className="mt-4 h-10 w-full animate-pulse rounded-xl bg-slate-100" />
+    </div>
+  );
+}
+
+function SelectedMealCard({ name, onRemove }: { name: string; onRemove: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-lg">
+          🍽️
+        </div>
+        <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+      </div>
+      <button
+        onClick={onRemove}
+        aria-label="Retirer"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------- Cook Tab ------------------------- */
+
+function CookTab({
+  meals,
+  addMeal,
+  removeMeal,
+  ingredients,
+  recipes,
+  choices,
+  setChoices,
+  total,
+  genLoading,
+  genError,
+  onGenerate,
+  onSaveHistory,
+  step,
+}: {
+  meals: string[];
+  addMeal: (v: string) => void;
+  removeMeal: (i: number) => void;
+  ingredients: Ingredient[];
+  recipes: RecipeInfo[];
+  choices: Choices;
+  setChoices: React.Dispatch<React.SetStateAction<Choices>>;
+  total: number;
+  genLoading: boolean;
+  genError: string | null;
+  onGenerate: () => void;
+  onSaveHistory: () => void;
+  step: number;
+}) {
+  const [input, setInput] = useState("");
+  const hasList = ingredients.length > 0;
+
+  return (
+    <div className="space-y-10">
+      <section>
+        <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">
+          Cuisine · Étape {Math.min(step, 4)}/4
+        </p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
+          Tes repas de la semaine
+        </h1>
+        <p className="mt-2 text-sm text-slate-500 sm:text-base">
+          Ajoute ce que tu veux manger. L'IA génère ta liste de courses complète.
+        </p>
+        <Stepper current={step} />
+      </section>
+
+      {/* Step 1 */}
+      <StepBlock number={1} title="Saisie des repas" active={step === 1}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addMeal(input);
+                setInput("");
+              }
+            }}
+            placeholder="ex: pâtes carbonara, poulet rôti…"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          />
+          <button
+            onClick={() => {
+              addMeal(input);
+              setInput("");
+            }}
+            className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
           >
             Ajouter
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {SUGGESTIONS.filter((s) => !meals.some((m) => m.toLowerCase() === s.toLowerCase()))
-            .slice(0, 6)
-            .map((s) => (
-              <button
-                key={s}
-                onClick={() => addMeal(s)}
-                className="rounded-full border border-dashed border-emerald-300 bg-emerald-50/60 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-              >
-                + {s}
-              </button>
-            ))}
-        </div>
-      </Card>
-
-      <Card>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-bold">Repas au menu</h2>
-          <span className="text-xs text-slate-500">{meals.length} sélection(s)</span>
-        </div>
-
-        {meals.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-400">
-            Aucun repas ajouté pour le moment.
-          </p>
-        ) : (
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {meals.map((m, i) => (
-              <li
-                key={i}
-                className="group flex items-center gap-2 rounded-full bg-slate-900 py-1.5 pl-3 pr-1.5 text-sm text-white shadow-sm"
-              >
-                <span>🍽️ {m}</span>
+        {meals.length === 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Suggestions rapides
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_MEALS.map((s) => (
                 <button
-                  onClick={() => removeMeal(i)}
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs opacity-70 hover:bg-white/20 hover:opacity-100"
-                  aria-label="Supprimer"
+                  key={s.name}
+                  onClick={() => addMeal(s.name)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-emerald-400 hover:text-emerald-700"
                 >
-                  ✕
+                  {s.emoji} {s.name}
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
+              ))}
+            </div>
           </div>
         )}
 
+        {meals.length > 0 && (
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {meals.map((m, i) => (
+              <SelectedMealCard key={i} name={m} onRemove={() => removeMeal(i)} />
+            ))}
+          </div>
+        )}
+      </StepBlock>
+
+      {/* Step 2 */}
+      <StepBlock number={2} title="Génération automatique" active={step === 2}>
+        {genError && (
+          <div className="mb-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+            {genError}
+          </div>
+        )}
         <button
-          disabled={meals.length === 0 || loading}
+          disabled={meals.length === 0 || genLoading}
           onClick={onGenerate}
-          className="mt-5 w-full rounded-xl bg-slate-900 py-4 text-base font-semibold text-white shadow-md transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+          className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 text-base font-extrabold text-white shadow-[0_16px_36px_-16px_rgba(16,185,129,0.6)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
         >
-          {loading
-            ? "✨ L'IA cuisine ta liste…"
+          {genLoading
+            ? "✨ L'IA prépare ta liste…"
             : hasList
-              ? "🔄 Regénérer avec ces repas"
-              : "🤖 Générer recettes & liste"}
+              ? "🔄 Régénérer la liste"
+              : "🤖 Générer ma liste de courses"}
         </button>
-      </Card>
-    </div>
-  );
-}
 
-function RecettesTab({
-  recipes,
-  openRecipe,
-  setOpenRecipe,
-  onGoRepas,
-  onGoCourses,
-  hasList,
-}: {
-  recipes: RecipeInfo[];
-  openRecipe: string | null;
-  setOpenRecipe: (v: string | null) => void;
-  onGoRepas: () => void;
-  onGoCourses: () => void;
-  hasList: boolean;
-}) {
-  if (recipes.length === 0) {
-    return (
-      <EmptyState
-        icon="📖"
-        title="Aucune recette encore"
-        desc="Ajoute des repas et lance la génération pour découvrir des recettes sourcées."
-        action={{ label: "Ajouter des repas", onClick: onGoRepas }}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-bold">Recettes de référence</h2>
-          <span className="text-xs text-slate-500">{recipes.length} recette(s)</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Sélectionnées par l'IA avec la source d'origine (Marmiton, 750g…).
-        </p>
-
-        <div className="mt-4 space-y-2">
-          {recipes.map((r) => {
-            const open = openRecipe === r.meal;
-            return (
-              <div
-                key={r.meal}
-                className="overflow-hidden rounded-xl border border-slate-200 bg-white"
-              >
-                <button
-                  onClick={() => setOpenRecipe(open ? null : r.meal)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+        {recipes.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Recettes de référence
+            </p>
+            <div className="space-y-2">
+              {recipes.map((r) => (
+                <a
+                  key={r.meal + r.sourceUrl}
+                  href={r.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-300 hover:bg-emerald-50/40"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{r.title}</p>
                     <p className="truncate text-xs text-slate-500">
-                      pour <span className="text-slate-700">{r.meal}</span> · via {r.source}
+                      pour {r.meal} · via {r.source}
                     </p>
                   </div>
-                  <span className={`transition ${open ? "rotate-180" : ""}`}>⌄</span>
-                </button>
-                {open && (
-                  <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm text-slate-700">
-                    <p>{r.summary}</p>
-                    {r.sourceUrl && (
-                      <a
-                        href={r.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-                      >
-                        Voir la recette sur {r.source} ↗
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+                  <span className="text-xs font-semibold text-emerald-700">Voir ↗</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </StepBlock>
 
-      {hasList && (
-        <button
-          onClick={onGoCourses}
-          className="w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          Passer à la liste de courses →
-        </button>
-      )}
+      {/* Step 3 */}
+      <StepBlock number={3} title="Choix de qualité" active={step === 3 && hasList}>
+        {!hasList ? (
+          <p className="text-sm text-slate-400">
+            Génère d'abord ta liste pour choisir la qualité de chaque produit.
+          </p>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {ingredients.map((ing) => {
+                const selected = choices[ing.name] ?? 0;
+                return (
+                  <div
+                    key={ing.name}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_0_rgba(15,23,42,0.03)]"
+                  >
+                    <div className="mb-3 flex items-baseline justify-between gap-3">
+                      <h3 className="truncate text-sm font-bold">{ing.name}</h3>
+                      <span className="shrink-0 text-xs font-medium text-slate-400">
+                        {ing.quantity}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {ing.options.map((opt, idx) => {
+                        const active = selected === idx;
+                        const tier = ["Standard", "Qualité", "Premium"][idx] ?? "";
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() =>
+                              setChoices((c) => ({ ...c, [ing.name]: idx }))
+                            }
+                            className={`flex flex-col items-start rounded-xl border-2 p-3 text-left transition ${
+                              active
+                                ? "border-emerald-500 bg-emerald-50/70 shadow-[0_6px_16px_-10px_rgba(16,185,129,0.5)]"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                            }`}
+                          >
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider ${
+                                active ? "text-emerald-700" : "text-slate-400"
+                              }`}
+                            >
+                              {tier}
+                            </span>
+                            <span className="mt-1 text-xs font-medium text-slate-700">
+                              {opt.label}
+                            </span>
+                            <span className="mt-1 text-base font-extrabold text-slate-900">
+                              {opt.price.toFixed(2)}€
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                  Total estimé
+                </p>
+                <p className="text-3xl font-extrabold">{total.toFixed(2)}€</p>
+                <p className="mt-0.5 text-xs text-white/60">
+                  {ingredients.length} produits · {meals.length} repas
+                </p>
+              </div>
+              <button
+                onClick={onSaveHistory}
+                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold transition hover:bg-white/20"
+              >
+                💾 Sauvegarder cette liste
+              </button>
+            </div>
+          </>
+        )}
+      </StepBlock>
+
+      {/* Step 4 */}
+      <StepBlock number={4} title="Choix du magasin" active={step === 3 && hasList}>
+        {!hasList ? (
+          <p className="text-sm text-slate-400">
+            Choisis d'abord tes produits pour envoyer ton panier en magasin.
+          </p>
+        ) : (
+          <StoreCart ingredients={ingredients} choices={choices} />
+        )}
+      </StepBlock>
     </div>
   );
 }
 
-function CoursesTab({
-  ingredients,
-  choices,
-  setChoices,
-  total,
-  onSave,
-  onGoPanier,
-  onGoRepas,
-}: {
-  ingredients: Ingredient[];
-  choices: Choices;
-  setChoices: React.Dispatch<React.SetStateAction<Choices>>;
-  total: number;
-  onSave: () => void;
-  onGoPanier: () => void;
-  onGoRepas: () => void;
-}) {
-  if (ingredients.length === 0) {
-    return (
-      <EmptyState
-        icon="🧾"
-        title="Pas encore de liste"
-        desc="Génère d'abord ta liste depuis l'onglet Repas."
-        action={{ label: "Ajouter des repas", onClick: onGoRepas }}
-      />
-    );
-  }
-
+function Stepper({ current }: { current: number }) {
+  const steps = ["Repas", "Génération", "Qualité", "Magasin"];
   return (
-    <div className="space-y-5">
-      <Card>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-bold">Ta liste de courses</h2>
-          <span className="text-xs text-slate-500">{ingredients.length} produits</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Choisis la qualité de chaque produit — le total se met à jour en direct.
-        </p>
+    <div className="mt-6 flex items-center gap-2">
+      {steps.map((s, i) => {
+        const n = i + 1;
+        const done = current > n;
+        const active = current === n;
+        return (
+          <div key={s} className="flex flex-1 items-center gap-2">
+            <div
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold transition ${
+                done
+                  ? "bg-emerald-500 text-white"
+                  : active
+                    ? "bg-slate-900 text-white ring-4 ring-emerald-100"
+                    : "bg-slate-100 text-slate-400"
+              }`}
+            >
+              {done ? "✓" : n}
+            </div>
+            <span
+              className={`hidden text-xs font-semibold sm:inline ${
+                active ? "text-slate-900" : done ? "text-emerald-700" : "text-slate-400"
+              }`}
+            >
+              {s}
+            </span>
+            {i < steps.length - 1 && (
+              <div
+                className={`ml-1 hidden h-[2px] flex-1 rounded-full sm:block ${
+                  done ? "bg-emerald-400" : "bg-slate-200"
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-        <div className="mt-4 space-y-3">
-          {ingredients.map((ing) => {
-            const selected = choices[ing.name] ?? 0;
-            return (
-              <div key={ing.name} className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="mb-3 flex items-baseline justify-between">
-                  <h3 className="text-sm font-semibold">{ing.name}</h3>
-                  <span className="text-xs text-slate-500">{ing.quantity}</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {ing.options.map((opt, idx) => {
-                    const active = selected === idx;
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() =>
-                          setChoices((c) => ({ ...c, [ing.name]: idx }))
-                        }
-                        className={`flex items-center justify-between rounded-lg border-2 px-3 py-2 text-left transition ${
-                          active
-                            ? "border-emerald-500 bg-emerald-50"
-                            : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
-                      >
-                        <span className="text-xs font-medium text-slate-800">{opt.label}</span>
-                        <span className="ml-2 text-sm font-bold">{opt.price.toFixed(2)}€</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+function StepBlock({
+  number,
+  title,
+  active,
+  children,
+}: {
+  number: number;
+  title: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="relative">
+      <div className="mb-4 flex items-center gap-3">
+        <div
+          className={`grid h-9 w-9 place-items-center rounded-xl text-sm font-extrabold ${
+            active
+              ? "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_6px_14px_-6px_rgba(16,185,129,0.6)]"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {number}
         </div>
-      </Card>
-
-      <div className="flex flex-col gap-3 rounded-2xl bg-slate-900 p-5 text-white sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wider opacity-70">Total estimé</p>
-          <p className="text-3xl font-bold">{total.toFixed(2)}€</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            onClick={onSave}
-            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold hover:bg-white/20"
-          >
-            💾 Sauvegarder
-          </button>
-          <button
-            onClick={onGoPanier}
-            className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-400"
-          >
-            🛒 Envoyer au magasin →
-          </button>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Étape {number}/4
+          </p>
+          <h2 className="text-lg font-bold tracking-tight">{title}</h2>
         </div>
       </div>
-    </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:p-6">
+        {children}
+      </div>
+    </section>
   );
 }
 
-function PanierTab({
-  ingredients,
-  choices,
-  total,
-  onGoCourses,
-}: {
-  ingredients: Ingredient[];
-  choices: Choices;
-  total: number;
-  onGoCourses: () => void;
-}) {
-  if (ingredients.length === 0) {
-    return (
-      <EmptyState
-        icon="🛒"
-        title="Panier vide"
-        desc="Génère ta liste avant de choisir un magasin."
-        action={{ label: "Ajouter des repas", onClick: onGoCourses }}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-bold">Envoyer au magasin</h2>
-          <span className="text-xs text-slate-500">Total {total.toFixed(2)}€</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Chaque produit s'ouvre pré-recherché sur le site du magasin, prêt à ajouter.
-        </p>
-        <StoreCart ingredients={ingredients} choices={choices} />
-      </Card>
-    </div>
-  );
-}
+/* ------------------------- Store Cart ------------------------- */
 
 function StoreCart({
   ingredients,
@@ -837,9 +1118,11 @@ function StoreCart({
   ingredients: Ingredient[];
   choices: Choices;
 }) {
-  const [store, setStore] = useState<Store | null>(null);
+  const [storeIdx, setStoreIdx] = useState<number | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+
+  const store = storeIdx !== null ? STORES[storeIdx] : null;
 
   const items = useMemo(
     () =>
@@ -848,7 +1131,7 @@ function StoreCart({
         const opt = ing.options[idx];
         return {
           key: ing.name,
-          query: `${ing.name}`,
+          query: ing.name,
           label: `${ing.quantity} ${ing.name}`,
           option: opt?.label ?? "",
           price: opt?.price ?? 0,
@@ -857,29 +1140,21 @@ function StoreCart({
     [ingredients, choices],
   );
 
-  const pickStore = (s: Store) => {
-    setStore(s);
-    setAdded(new Set());
-  };
-
   const openOne = (query: string, key: string) => {
     if (!store) return;
     window.open(store.search(query), "_blank", "noopener,noreferrer");
-    setAdded((prev) => {
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
+    setAdded((prev) => new Set(prev).add(key));
   };
 
   const openAll = () => {
     if (!store) return;
-    const remaining = items.filter((i) => !added.has(i.key));
-    remaining.forEach((it, idx) => {
-      setTimeout(() => {
-        window.open(store.search(it.query), "_blank", "noopener,noreferrer");
-      }, idx * 250);
-    });
+    items
+      .filter((i) => !added.has(i.key))
+      .forEach((it, idx) => {
+        setTimeout(() => {
+          window.open(store.search(it.query), "_blank", "noopener,noreferrer");
+        }, idx * 250);
+      });
     setAdded(new Set(items.map((i) => i.key)));
   };
 
@@ -894,13 +1169,17 @@ function StoreCart({
 
   if (!store) {
     return (
-      <div className="mt-4">
+      <div>
+        <p className="mb-3 text-sm text-slate-500">Où veux-tu faire tes courses&nbsp;?</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {STORES.map((s) => (
+          {STORES.map((s, i) => (
             <button
               key={s.name}
-              onClick={() => pickStore(s)}
-              className={`flex items-center justify-center rounded-xl px-3 py-4 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] ${s.color}`}
+              onClick={() => {
+                setStoreIdx(i);
+                setAdded(new Set());
+              }}
+              className={`rounded-2xl bg-gradient-to-br ${s.accent} px-4 py-5 text-sm font-extrabold text-white shadow-[0_10px_25px_-12px_rgba(15,23,42,0.35)] transition hover:brightness-110 active:scale-[0.98]`}
             >
               {s.name}
             </button>
@@ -911,20 +1190,20 @@ function StoreCart({
   }
 
   const done = added.size;
-  const total = items.length;
+  const totalItems = items.length;
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div>
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
             Magasin sélectionné
           </p>
-          <p className="text-base font-bold">{store.name}</p>
+          <p className="text-base font-extrabold">{store.name}</p>
         </div>
         <button
-          onClick={() => setStore(null)}
-          className="text-xs text-slate-400 hover:text-slate-700"
+          onClick={() => setStoreIdx(null)}
+          className="text-xs font-semibold text-slate-400 hover:text-slate-700"
         >
           Changer
         </button>
@@ -932,12 +1211,12 @@ function StoreCart({
 
       <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-emerald-500 transition-all"
-          style={{ width: `${total ? (done / total) * 100 : 0}%` }}
+          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all"
+          style={{ width: `${totalItems ? (done / totalItems) * 100 : 0}%` }}
         />
       </div>
-      <p className="mb-3 text-xs text-slate-500">
-        {done}/{total} produits envoyés au panier
+      <p className="mb-4 text-xs font-medium text-slate-500">
+        {done}/{totalItems} produits envoyés
       </p>
 
       <ul className="space-y-2">
@@ -946,16 +1225,14 @@ function StoreCart({
           return (
             <li
               key={it.key}
-              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 transition ${
-                isAdded ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"
+              className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition ${
+                isAdded ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"
               }`}
             >
               <div className="min-w-0">
                 <p
-                  className={`truncate text-sm font-medium ${
-                    isAdded
-                      ? "text-emerald-900 line-through decoration-emerald-400"
-                      : "text-slate-800"
+                  className={`truncate text-sm font-semibold ${
+                    isAdded ? "text-emerald-900" : "text-slate-800"
                   }`}
                 >
                   {it.label}
@@ -966,8 +1243,10 @@ function StoreCart({
               </div>
               <button
                 onClick={() => openOne(it.query, it.key)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold shadow-sm transition ${
-                  isAdded ? "bg-white text-emerald-700 hover:bg-emerald-100" : `${store.color} text-white`
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                  isAdded
+                    ? "bg-white text-emerald-700 hover:bg-emerald-100"
+                    : "bg-slate-900 text-white hover:bg-emerald-600"
                 }`}
               >
                 {isAdded ? "Rouvrir" : "Ajouter"}
@@ -980,114 +1259,22 @@ function StoreCart({
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
           onClick={openAll}
-          className={`flex-1 rounded-xl py-3 text-sm font-semibold text-white shadow-md ${store.color}`}
+          className={`flex-1 rounded-xl bg-gradient-to-r ${store.accent} py-3 text-sm font-extrabold text-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.35)]`}
         >
           🛒 Tout envoyer sur {store.name}
         </button>
         <button
           onClick={copyList}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           {copied ? "✓ Copié" : "Copier la liste"}
         </button>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-        Astuce : autorise les pop-ups pour ouvrir tous les produits d'un coup. Les magasins n'autorisent pas
-        l'ajout automatique — chaque produit s'ouvre pré-recherché, il suffit de cliquer « Ajouter » sur leur
-        site.
+
+      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+        Les magasins n'autorisent pas l'ajout automatique — chaque produit s'ouvre pré-recherché,
+        prêt à ajouter en un clic.
       </p>
-    </div>
-  );
-}
-
-function HistoryView({
-  history,
-  onRestore,
-  onDelete,
-  onGoCuisine,
-}: {
-  history: HistoryEntry[];
-  onRestore: (e: HistoryEntry) => void;
-  onDelete: (id: string) => void;
-  onGoCuisine: () => void;
-}) {
-  if (history.length === 0) {
-    return (
-      <EmptyState
-        icon="🗂️"
-        title="Aucun historique"
-        desc="Génère une liste et sauvegarde-la pour la retrouver ici."
-        action={{ label: "Aller cuisiner", onClick: onGoCuisine }}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {history.map((e) => {
-        const date = new Date(e.createdAt);
-        return (
-          <div
-            key={e.id}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_0_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                  {date.toLocaleDateString("fr-FR", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                  })}{" "}
-                  · {date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-                <p className="mt-1 truncate text-base font-semibold">
-                  {e.meals.slice(0, 3).join(", ")}
-                  {e.meals.length > 3 && ` +${e.meals.length - 3}`}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {e.ingredients.length} produits · {e.recipes.length} recettes
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-emerald-700">{e.total.toFixed(2)}€</p>
-              </div>
-            </div>
-
-            {e.recipes.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {e.recipes.map((r) => (
-                  <a
-                    key={r.meal + r.sourceUrl}
-                    href={r.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-200"
-                    title={r.title}
-                  >
-                    {r.meal} · {r.source} ↗
-                  </a>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => onRestore(e)}
-                className="flex-1 rounded-lg bg-slate-900 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-              >
-                Rouvrir
-              </button>
-              <button
-                onClick={() => onDelete(e.id)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 hover:border-red-200 hover:text-red-600"
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
