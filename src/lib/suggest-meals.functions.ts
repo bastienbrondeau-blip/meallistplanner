@@ -1,33 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type Profile = {
-  goal: string;
-  allergies: string;
-  diet: string;
-  budget: string;
-  time: string;
-  cuisines: string[];
-};
-
 export type MealSuggestion = {
   name: string;
   emoji: string;
   description: string;
+  time: string;
+  price: string;
 };
 
 export const suggestMeals = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => {
-    const d = (data ?? {}) as { profile?: Partial<Profile> };
+    const d = (data ?? {}) as { profile?: Record<string, unknown>; slot?: unknown; count?: unknown };
     const p = d.profile ?? {};
+    const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
     return {
       profile: {
-        goal: String(p.goal ?? "Sans objectif"),
+        diets: arr(p.diets),
         allergies: String(p.allergies ?? "Aucune"),
-        diet: String(p.diet ?? "Omnivore"),
-        budget: String(p.budget ?? "Moyen"),
-        time: String(p.time ?? "Pas d'importance"),
-        cuisines: Array.isArray(p.cuisines) ? p.cuisines.map(String) : [],
-      } as Profile,
+        timeMax: String(p.timeMax ?? "Pas de limite"),
+        frequency: String(p.frequency ?? "3-4x par semaine"),
+        budget: String(p.budget ?? "10-15 € par repas"),
+        cuisines: arr(p.cuisines),
+        dislikes: arr(p.dislikes),
+        store: String(p.store ?? "Carrefour"),
+      },
+      slot: typeof d.slot === "string" ? d.slot : "",
+      count: typeof d.count === "number" ? Math.min(Math.max(d.count, 4), 21) : 8,
     };
   })
   .handler(async ({ data }): Promise<{ suggestions: MealSuggestion[] }> => {
@@ -35,26 +33,25 @@ export const suggestMeals = createServerFn({ method: "POST" })
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
 
     const p = data.profile;
-    const systemPrompt = `Tu es un chef français. Propose 8 idées de repas adaptées au profil.
-Retourne UNIQUEMENT un JSON: { "suggestions": [{ "name": "Poulet rôti aux herbes", "emoji": "🍗", "description": "Simple, familial, ~30min" }] }
+    const systemPrompt = `Tu es un chef français. Propose ${data.count} idées de repas adaptées au profil.
+Retourne UNIQUEMENT un JSON: { "suggestions": [{ "name": "Poulet rôti aux herbes", "emoji": "🍗", "description": "Simple, familial", "time": "35 min", "price": "~9 €" }] }
 Règles:
-- 8 suggestions variées, appétissantes, en français
-- Respecte STRICTEMENT le régime et les allergies (aucun ingrédient interdit)
-- Adapte richesse/légèreté à l'objectif
-- Adapte au budget (recettes simples si cheap)
-- Respecte le temps de préparation max
-- Priorise les cuisines préférées
-- emoji: 1 seul emoji représentatif
-- description: 8-12 mots max, style, temps approx
+- ${data.count} suggestions variées, appétissantes, en français
+- Respecte STRICTEMENT le régime, les allergies et les aliments détestés (aucun ingrédient interdit)
+- Adapte au budget, au temps max et priorise les cuisines préférées
+- Tous les ingrédients doivent être trouvables chez ${p.store}
+- description: 6-10 mots max
 - Aucun texte hors JSON.`;
 
     const userPrompt = `Profil:
-- Objectif: ${p.goal}
-- Allergies/intolérances: ${p.allergies}
-- Régime: ${p.diet}
+- Régimes/restrictions: ${p.diets.length ? p.diets.join(", ") : "Aucune"}
+- Allergies: ${p.allergies || "Aucune"}
+- Temps max: ${p.timeMax}
+- Fréquence de cuisson: ${p.frequency}
 - Budget par repas: ${p.budget}
-- Temps max: ${p.time}
-- Cuisines préférées: ${p.cuisines.length > 0 ? p.cuisines.join(", ") : "Toutes"}`;
+- Cuisines préférées: ${p.cuisines.length ? p.cuisines.join(", ") : "Toutes"}
+- Aliments détestés: ${p.dislikes.length ? p.dislikes.join(", ") : "Aucun"}
+- Magasin: ${p.store}${data.slot ? `\n- Moment de la journée: ${data.slot}` : ""}`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -83,10 +80,12 @@ Règles:
     } catch {
       throw new Error("Réponse IA invalide");
     }
-    const suggestions = (parsed.suggestions ?? []).slice(0, 8).map((s) => ({
+    const suggestions = (parsed.suggestions ?? []).slice(0, data.count).map((s) => ({
       name: String(s.name ?? ""),
       emoji: String(s.emoji ?? "🍽️"),
       description: String(s.description ?? ""),
+      time: String(s.time ?? ""),
+      price: String(s.price ?? ""),
     }));
     return { suggestions };
   });
