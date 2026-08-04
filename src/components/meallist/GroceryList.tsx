@@ -1,14 +1,8 @@
-import { Check, Copy, ExternalLink, Loader2, ShoppingBag, Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, ShoppingBag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  aisleRank,
-  cartTotal,
-  storeById,
-  type CartItem,
-  type StoreId,
-} from "@/lib/meallist";
+import { AISLE_ORDER, STORES, aisleRank, cartTotal, storeById, type CartItem, type StoreId } from "@/lib/meallist";
 import { cn } from "@/lib/utils";
 
 export function GroceryList({
@@ -18,35 +12,43 @@ export function GroceryList({
   onSelectOption,
   onRemove,
   onClear,
+  onStoreChange,
 }: {
   items: CartItem[];
-  store: StoreId | null;
+  store: StoreId;
   loading: boolean;
   onSelectOption: (id: string, idx: number) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
+  onStoreChange: (id: StoreId) => void;
 }) {
-  const s = storeById(store);
+  const s = storeById(store) ?? STORES[0];
   const total = cartTotal(items);
   const aisles = Array.from(new Set(items.map((i) => i.aisle))).sort((a, b) => aisleRank(a) - aisleRank(b));
-  const minutes = Math.max(10, Math.round(items.length * 1.5));
 
   const copyList = async () => {
-    const text = items
+    const text = [...items]
+      .sort((a, b) => aisleRank(a.aisle) - aisleRank(b.aisle))
       .map((i) => `- ${i.name} (${i.quantity}) — ${i.options[i.selected]?.label ?? ""}`)
       .join("\n");
-    await navigator.clipboard.writeText(text);
-    toast.success("Liste copiée dans le presse-papier");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Liste copiée dans le presse-papier");
+    } catch {
+      toast.error("Copie impossible sur ce navigateur");
+    }
   };
 
-  const openAll = () => {
-    if (!s) return;
-    items.forEach((it, idx) => {
+  const openStore = (id: StoreId) => {
+    const target = storeById(id) ?? STORES[0];
+    onStoreChange(id);
+    window.open(target.search(items[0]?.name ?? "courses"), "_blank", "noopener,noreferrer");
+    items.slice(1, 8).forEach((it, idx) => {
       setTimeout(() => {
-        window.open(s.search(it.options[it.selected]?.label || it.name), "_blank", "noopener,noreferrer");
-      }, idx * 350);
+        window.open(target.search(it.options[it.selected]?.label || it.name), "_blank", "noopener,noreferrer");
+      }, (idx + 1) * 400);
     });
-    toast.success(`${items.length} produits envoyés vers ${s.name}`);
+    toast.success(`Produits envoyés vers ${target.name}`);
   };
 
   if (loading) {
@@ -62,12 +64,11 @@ export function GroceryList({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">
+      <div className="rounded-3xl border border-dashed border-border bg-card px-6 py-16 text-center">
         <ShoppingBag className="mx-auto h-10 w-10 text-muted-foreground" />
-        <h3 className="mt-4 text-xl font-semibold text-foreground">Ton panier est vide</h3>
+        <h3 className="mt-4 text-xl font-semibold text-foreground">Aucun ingrédient pour l'instant</h3>
         <p className="mx-auto mt-2 max-w-md text-base text-muted-foreground">
-          Planifie des repas dans l'onglet Cuisine puis valide ton panier complet : les ingrédients arrivent ici,
-          consolidés et triés par rayon.
+          Remplis ta semaine dans l'onglet Cuisine puis clique sur « Générer ma liste de courses ».
         </p>
       </div>
     );
@@ -75,29 +76,53 @@ export function GroceryList({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {items.length} produits · {s?.name ?? "magasin non défini"} · ~{minutes} min de courses
+            {items.length} produits · triés par rayon · {s.name}
           </p>
           <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground">{total.toFixed(2)} €</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void copyList()}>
-            <Copy className="mr-2 h-4 w-4" /> Copier
+          <Button variant="outline" className="h-11" onClick={() => void copyList()}>
+            <Copy className="mr-2 h-4 w-4" /> Copier la liste
           </Button>
-          <Button variant="ghost" onClick={onClear}>
+          <Button className="h-11" onClick={() => openStore(s.id)}>
+            <ShoppingBag className="mr-2 h-4 w-4" /> Ouvrir {s.name}
+          </Button>
+          <Button variant="ghost" className="h-11" onClick={onClear}>
             <Trash2 className="mr-2 h-4 w-4" /> Vider
           </Button>
-          <Button onClick={openAll} disabled={!s} className="min-w-48">
-            <ShoppingBag className="mr-2 h-4 w-4" /> Tout ajouter chez {s?.name ?? "…"}
-          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-muted-foreground">Autres magasins</p>
+        <div className="grid gap-3 sm:grid-cols-4">
+          {STORES.map((st) => (
+            <button
+              key={st.id}
+              type="button"
+              onClick={() => openStore(st.id)}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl border p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm",
+                st.id === s.id ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40",
+              )}
+            >
+              <span className="text-2xl" aria-hidden>
+                {st.emoji}
+              </span>
+              <span className="text-sm font-semibold text-foreground">{st.name}</span>
+            </button>
+          ))}
         </div>
       </div>
 
       {aisles.map((aisle) => (
         <section key={aisle} className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{aisle}</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {AISLE_ORDER.includes(aisle) ? aisle : "Autre"}
+          </h3>
           <div className="space-y-3">
             {items
               .filter((i) => i.aisle === aisle)
@@ -152,26 +177,23 @@ export function GroceryList({
                     })}
                   </div>
 
-                  {s && (
-                    <a
-                      href={s.search(item.options[item.selected]?.label || item.name)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                    >
-                      Ouvrir chez {s.name} <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
+                  <a
+                    href={s.search(item.options[item.selected]?.label || item.name)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    Ouvrir chez {s.name} <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </div>
               ))}
           </div>
         </section>
       ))}
 
-      <div className="sticky bottom-4 z-20">
-        <Button onClick={openAll} disabled={!s} className="h-14 w-full text-base shadow-lg">
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Valider mon panier complet · {total.toFixed(2)} €
+      <div className="sticky bottom-20 z-20 md:bottom-4">
+        <Button onClick={() => openStore(s.id)} className="h-14 w-full text-base shadow-lg">
+          Ouvrir {s.name} · {total.toFixed(2)} €
         </Button>
       </div>
     </div>
