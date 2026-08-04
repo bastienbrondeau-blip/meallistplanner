@@ -1,73 +1,86 @@
-export type StoreId = "carrefour" | "lidl" | "intermarche" | "auchan" | "amazonfresh";
+export type StoreId = "carrefour" | "leclerc" | "amazonfresh" | "intermarche";
 
 export const STORES: {
   id: StoreId;
   name: string;
   emoji: string;
-  tint: string;
   search: (q: string) => string;
 }[] = [
   {
     id: "carrefour",
     name: "Carrefour",
     emoji: "🛒",
-    tint: "bg-[oklch(0.95_0.03_250)]",
     search: (q) => `https://www.carrefour.fr/s?q=${encodeURIComponent(q)}`,
   },
   {
-    id: "lidl",
-    name: "Lidl",
-    emoji: "🏷️",
-    tint: "bg-[oklch(0.95_0.04_95)]",
-    search: (q) => `https://www.lidl.fr/q/search?q=${encodeURIComponent(q)}`,
-  },
-  {
-    id: "intermarche",
-    name: "Intermarché",
+    id: "leclerc",
+    name: "Leclerc",
     emoji: "🧺",
-    tint: "bg-[oklch(0.95_0.04_30)]",
-    search: (q) => `https://www.intermarche.com/recherche?q=${encodeURIComponent(q)}`,
-  },
-  {
-    id: "auchan",
-    name: "Auchan",
-    emoji: "🥬",
-    tint: "bg-[oklch(0.95_0.05_150)]",
-    search: (q) => `https://www.auchan.fr/recherche?text=${encodeURIComponent(q)}`,
+    search: (q) => `https://www.e.leclerc/recherche?q=${encodeURIComponent(q)}`,
   },
   {
     id: "amazonfresh",
     name: "Amazon Fresh",
     emoji: "📦",
-    tint: "bg-[oklch(0.95_0.04_70)]",
     search: (q) => `https://www.amazon.fr/s?i=amazonfresh&k=${encodeURIComponent(q)}`,
+  },
+  {
+    id: "intermarche",
+    name: "Intermarché",
+    emoji: "🏷️",
+    search: (q) => `https://www.intermarche.com/recherche?q=${encodeURIComponent(q)}`,
   },
 ];
 
 export const storeById = (id: StoreId | null) => STORES.find((s) => s.id === id) ?? null;
 
+export type Mode = "fitness" | "classic";
+
 export type Profile = {
-  diets: string[];
+  mode: Mode | null;
+  goal: string;
+  weight: string;
+  height: string;
+  activity: string;
+  diet: string;
+  hasAllergies: boolean;
   allergies: string;
-  timeMax: string;
-  frequency: string;
   budget: string;
+  timeMax: string;
   cuisines: string[];
-  dislikes: string[];
-  store: StoreId | null;
+  store: StoreId;
   done: boolean;
 };
 
 export const emptyProfile: Profile = {
-  diets: [],
+  mode: null,
+  goal: "Maintenir",
+  weight: "",
+  height: "",
+  activity: "Modéré",
+  diet: "Omnivore",
+  hasAllergies: false,
   allergies: "",
+  budget: "Moyen (5-15 €)",
   timeMax: "30 min",
-  frequency: "3-4x par semaine",
-  budget: "10-15 € par repas",
   cuisines: [],
-  dislikes: [],
-  store: null,
+  store: "carrefour",
   done: false,
+};
+
+export const GOALS = ["Prise de masse", "Sèche", "Maintenir"];
+export const ACTIVITIES = ["Sédentaire", "Modéré", "Actif", "Très actif"];
+export const DIETS_FITNESS = ["Omnivore", "Végétarien", "Végan"];
+export const DIETS_CLASSIC = ["Omnivore", "Végétarien", "Végan", "Sans gluten"];
+export const BUDGETS = ["Cheap (< 5 €)", "Moyen (5-15 €)", "Premium (> 15 €)"];
+export const TIMES = ["5 min", "15 min", "30 min", "1h+"];
+export const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine"];
+
+export type Macros = {
+  calories: string;
+  proteines: string;
+  glucides: string;
+  lipides: string;
 };
 
 export type Meal = {
@@ -75,13 +88,14 @@ export type Meal = {
   name: string;
   emoji: string;
   description: string;
+  macros?: Macros;
 };
 
 export const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 export const SLOTS = [
-  { id: "matin", label: "Matin" },
-  { id: "midi", label: "Midi" },
-  { id: "soir", label: "Soir" },
+  { id: "matin", label: "Matin", hint: "Petit-déjeuner" },
+  { id: "midi", label: "Midi", hint: "Déjeuner" },
+  { id: "soir", label: "Soir", hint: "Dîner" },
 ] as const;
 export type SlotId = (typeof SLOTS)[number]["id"];
 
@@ -138,9 +152,10 @@ export function save(key: string, value: unknown) {
 }
 
 export const KEYS = {
-  profile: "ml.profile.v2",
-  week: "ml.week.v2",
-  cart: "ml.cart.v2",
+  profile: "ml.profile.v3",
+  week: "ml.week.v3",
+  cart: "ml.cart.v3",
+  basket: "ml.basket.v3",
 };
 
 export function cartTotal(items: CartItem[]) {
@@ -159,4 +174,20 @@ export function mergeItems(existing: CartItem[], incoming: CartItem[]) {
     }
   }
   return out;
+}
+
+export function profileSummary(p: Profile) {
+  const rows: [string, string][] = [
+    ["Mode", p.mode === "fitness" ? "Fitness" : "Cuisine classique"],
+    ["Régime", p.diet],
+    ["Allergies", p.hasAllergies ? p.allergies || "Oui" : "Aucune"],
+    ["Budget", p.budget],
+    ["Temps de prep", p.timeMax],
+  ];
+  if (p.mode === "fitness") {
+    rows.splice(1, 0, ["Objectif", p.goal], ["Poids", p.weight ? `${p.weight} kg` : "—"], ["Taille", p.height ? `${p.height} cm` : "—"], ["Activité", p.activity]);
+  } else {
+    rows.push(["Cuisines", p.cuisines.length ? p.cuisines.join(", ") : "Toutes"]);
+  }
+  return rows;
 }

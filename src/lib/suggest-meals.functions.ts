@@ -6,6 +6,7 @@ export type MealSuggestion = {
   description: string;
   time: string;
   price: string;
+  macros?: { calories: string; proteines: string; glucides: string; lipides: string };
 };
 
 export const suggestMeals = createServerFn({ method: "POST" })
@@ -15,13 +16,16 @@ export const suggestMeals = createServerFn({ method: "POST" })
     const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
     return {
       profile: {
-        diets: arr(p.diets),
-        allergies: String(p.allergies ?? "Aucune"),
-        timeMax: String(p.timeMax ?? "Pas de limite"),
-        frequency: String(p.frequency ?? "3-4x par semaine"),
-        budget: String(p.budget ?? "10-15 € par repas"),
+        mode: String(p.mode ?? "classic") === "fitness" ? "fitness" : "classic",
+        goal: String(p.goal ?? "Maintenir"),
+        weight: String(p.weight ?? ""),
+        height: String(p.height ?? ""),
+        activity: String(p.activity ?? "Modéré"),
+        diet: String(p.diet ?? "Omnivore"),
+        allergies: String(p.allergies ?? ""),
+        budget: String(p.budget ?? "Moyen (5-15 €)"),
+        timeMax: String(p.timeMax ?? "30 min"),
         cuisines: arr(p.cuisines),
-        dislikes: arr(p.dislikes),
         store: String(p.store ?? "Carrefour"),
       },
       slot: typeof d.slot === "string" ? d.slot : "",
@@ -33,24 +37,33 @@ export const suggestMeals = createServerFn({ method: "POST" })
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
 
     const p = data.profile;
-    const systemPrompt = `Tu es un chef français. Propose ${data.count} idées de repas adaptées au profil.
-Retourne UNIQUEMENT un JSON: { "suggestions": [{ "name": "Poulet rôti aux herbes", "emoji": "🍗", "description": "Simple, familial", "time": "35 min", "price": "~9 €" }] }
+    const fitness = p.mode === "fitness";
+
+    const systemPrompt = `Tu es ${fitness ? "un coach nutrition et chef sportif français" : "un chef français"}.
+Propose ${data.count} idées de repas adaptées au profil.
+Retourne UNIQUEMENT ce JSON:
+{ "suggestions": [{ "name": "Poulet rôti aux herbes", "emoji": "🍗", "description": "Simple, familial", "time": "35 min", "price": "~9 €"${fitness ? `, "macros": { "calories": "620 kcal", "proteines": "48 g", "glucides": "55 g", "lipides": "18 g" }` : ""} }] }
 Règles:
 - ${data.count} suggestions variées, appétissantes, en français
-- Respecte STRICTEMENT le régime, les allergies et les aliments détestés (aucun ingrédient interdit)
-- Adapte au budget, au temps max et priorise les cuisines préférées
+- Respecte STRICTEMENT le régime et les allergies (aucun ingrédient interdit)
+- Adapte au budget et au temps de préparation max
 - Tous les ingrédients doivent être trouvables chez ${p.store}
 - description: 6-10 mots max
+${
+  fitness
+    ? `- Priorise les plats riches en protéines et aux macros équilibrés ("HealthKit"), cohérents avec l'objectif "${p.goal}" (prise de masse = surplus calorique, sèche = déficit et haute protéine)
+- macros OBLIGATOIRES et réalistes par portion pour CHAQUE plat`
+    : `- Priorise les cuisines préférées de l'utilisateur`
+}
 - Aucun texte hors JSON.`;
 
     const userPrompt = `Profil:
-- Régimes/restrictions: ${p.diets.length ? p.diets.join(", ") : "Aucune"}
+- Mode: ${fitness ? "Fitness" : "Cuisine classique"}
+${fitness ? `- Objectif: ${p.goal}\n- Poids: ${p.weight || "n/c"} kg\n- Taille: ${p.height || "n/c"} cm\n- Activité: ${p.activity}` : `- Cuisines préférées: ${p.cuisines.length ? p.cuisines.join(", ") : "Toutes"}`}
+- Régime: ${p.diet}
 - Allergies: ${p.allergies || "Aucune"}
-- Temps max: ${p.timeMax}
-- Fréquence de cuisson: ${p.frequency}
 - Budget par repas: ${p.budget}
-- Cuisines préférées: ${p.cuisines.length ? p.cuisines.join(", ") : "Toutes"}
-- Aliments détestés: ${p.dislikes.length ? p.dislikes.join(", ") : "Aucun"}
+- Temps max: ${p.timeMax}
 - Magasin: ${p.store}${data.slot ? `\n- Moment de la journée: ${data.slot}` : ""}`;
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -86,6 +99,14 @@ Règles:
       description: String(s.description ?? ""),
       time: String(s.time ?? ""),
       price: String(s.price ?? ""),
+      macros: s.macros
+        ? {
+            calories: String(s.macros.calories ?? "—"),
+            proteines: String(s.macros.proteines ?? "—"),
+            glucides: String(s.macros.glucides ?? "—"),
+            lipides: String(s.macros.lipides ?? "—"),
+          }
+        : undefined,
     }));
     return { suggestions };
   });

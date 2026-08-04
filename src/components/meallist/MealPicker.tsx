@@ -1,11 +1,28 @@
 import { useEffect, useState } from "react";
-import { Loader2, Plus, RefreshCw, ShoppingCart } from "lucide-react";
+import { Plus, RefreshCw, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { suggestMeals, type MealSuggestion } from "@/lib/suggest-meals.functions";
-import { uid, type Meal, type Profile } from "@/lib/meallist";
+import { storeById, uid, type Meal, type Profile } from "@/lib/meallist";
+
+export function MacroBadges({ macros }: { macros: NonNullable<Meal["macros"]> }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {[
+        ["Cal", macros.calories],
+        ["Prot", macros.proteines],
+        ["Gluc", macros.glucides],
+        ["Lip", macros.lipides],
+      ].map(([k, v]) => (
+        <span key={k} className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          {k} {v}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function MealPicker({
   open,
@@ -26,13 +43,18 @@ export function MealPicker({
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<MealSuggestion[]>([]);
   const [custom, setCustom] = useState("");
+  const fitness = profile.mode === "fitness";
 
   const fetchSuggestions = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await suggestMeals({
-        data: { profile: { ...profile, store: profile.store ?? "Carrefour" }, slot: slotLabel ?? "", count: 8 },
+        data: {
+          profile: { ...profile, store: storeById(profile.store)?.name ?? "Carrefour" },
+          slot: slotLabel ?? "",
+          count: 8,
+        },
       });
       setSuggestions(res.suggestions);
     } catch (e) {
@@ -53,7 +75,7 @@ export function MealPicker({
         <SheetHeader className="text-left">
           <SheetTitle className="text-2xl">Ajouter un repas{slotLabel ? ` · ${slotLabel}` : ""}</SheetTitle>
           <SheetDescription className="text-base">
-            Suggestions personnalisées selon ton profil et ton magasin.
+            Suggestions personnalisées selon ton profil{fitness ? " et tes objectifs" : ""}.
           </SheetDescription>
         </SheetHeader>
 
@@ -97,13 +119,8 @@ export function MealPicker({
             </p>
           )}
 
-          {loading && (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-2xl" />
-              ))}
-            </div>
-          )}
+          {loading &&
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}
 
           {!loading &&
             suggestions.map((s) => (
@@ -121,6 +138,7 @@ export function MealPicker({
                     <p className="mt-1 text-xs text-muted-foreground">
                       {[s.time, s.price].filter(Boolean).join(" · ")}
                     </p>
+                    {fitness && s.macros && <MacroBadges macros={s.macros} />}
                   </div>
                 </div>
                 <div className="mt-3 flex gap-2">
@@ -128,7 +146,13 @@ export function MealPicker({
                     size="sm"
                     className="flex-1"
                     onClick={() =>
-                      onPick({ id: uid(), name: s.name, emoji: s.emoji, description: s.description })
+                      onPick({
+                        id: uid(),
+                        name: s.name,
+                        emoji: s.emoji,
+                        description: s.description,
+                        macros: s.macros,
+                      })
                     }
                   >
                     <Plus className="mr-1.5 h-4 w-4" /> Planifier
@@ -139,10 +163,16 @@ export function MealPicker({
                       variant="secondary"
                       className="flex-1"
                       onClick={() =>
-                        onAddToCart({ id: uid(), name: s.name, emoji: s.emoji, description: s.description })
+                        onAddToCart({
+                          id: uid(),
+                          name: s.name,
+                          emoji: s.emoji,
+                          description: s.description,
+                          macros: s.macros,
+                        })
                       }
                     >
-                      <ShoppingCart className="mr-1.5 h-4 w-4" /> Au panier
+                      <ShoppingCart className="mr-1.5 h-4 w-4" /> Ingrédients
                     </Button>
                   )}
                 </div>
@@ -150,9 +180,7 @@ export function MealPicker({
             ))}
 
           {!loading && suggestions.length === 0 && !error && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4" /> Aucune suggestion pour le moment.
-            </p>
+            <p className="text-sm text-muted-foreground">Aucune suggestion pour le moment.</p>
           )}
         </div>
       </SheetContent>
