@@ -143,7 +143,7 @@ export function DayPlanner({
             className={cn(
               "min-w-28 shrink-0 rounded-2xl border p-4 text-left transition-all duration-300",
               i === day
-                ? "border-primary bg-primary/10 shadow-sm"
+                ? "border-primary bg-primary/10 shadow-card"
                 : "border-border bg-card hover:border-primary/40",
             )}
           >

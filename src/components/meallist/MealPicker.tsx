@@ -126,7 +126,7 @@ export function MealPicker({
             suggestions.map((s) => (
               <div
                 key={s.name}
-                className="rounded-2xl border border-border bg-card p-4 transition-all duration-300 hover:border-primary/40 hover:shadow-sm"
+                className="rounded-2xl border border-border bg-card p-4 transition-all duration-300 hover:border-primary/40 hover:shadow-card"
               >
                 <div className="flex items-start gap-3">
                   <span className="text-2xl" aria-hidden>
