@@ -10,6 +10,7 @@ import { MacroBadges, MealPicker } from "@/components/meallist/MealPicker";
 import { RecipeSheet } from "@/components/meallist/RecipeSheet";
 import { DayPlanner } from "@/components/meallist/DayPlanner";
 import { GroceryList } from "@/components/meallist/GroceryList";
+import { NutritionExport } from "@/components/meallist/NutritionExport";
 import { generateIngredients } from "@/lib/generate-ingredients.functions";
 import { suggestMeals, type MealSuggestion } from "@/lib/suggest-meals.functions";
 import {
@@ -459,7 +460,10 @@ function App() {
               Générer ma liste de courses ({plannedMeals.length} repas)
             </Button>
 
+            {plannedMeals.length > 0 && <NutritionExport meals={plannedMeals} />}
+
             <section className="space-y-6">
+
               <div>
                 <h2 className="text-3xl font-semibold tracking-tight text-foreground">Ta liste de courses</h2>
                 <p className="mt-2 text-base text-muted-foreground">
