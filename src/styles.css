@@ -133,6 +133,15 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+@theme {
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --shadow-soft: 0 1px 2px oklch(0.21 0.02 160 / 4%), 0 1px 3px oklch(0.21 0.02 160 / 4%);
+  --shadow-card: 0 1px 2px oklch(0.21 0.02 160 / 3%), 0 8px 24px -12px oklch(0.21 0.02 160 / 10%);
+  --shadow-elevated: 0 2px 4px oklch(0.21 0.02 160 / 4%), 0 18px 40px -18px oklch(0.21 0.02 160 / 16%);
+  --shadow-cta: 0 10px 30px -12px color-mix(in oklab, var(--primary) 55%, transparent);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -141,6 +150,13 @@
   html, body {
     font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
   }
 
   body {
@@ -148,4 +164,5 @@
     color: var(--color-foreground);
   }
 }
+
 

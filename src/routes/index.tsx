@@ -10,6 +10,7 @@ import { MacroBadges, MealPicker } from "@/components/meallist/MealPicker";
 import { RecipeSheet } from "@/components/meallist/RecipeSheet";
 import { DayPlanner } from "@/components/meallist/DayPlanner";
 import { GroceryList } from "@/components/meallist/GroceryList";
+import { NutritionExport } from "@/components/meallist/NutritionExport";
 import { generateIngredients } from "@/lib/generate-ingredients.functions";
 import { suggestMeals, type MealSuggestion } from "@/lib/suggest-meals.functions";
 import {
@@ -246,7 +247,7 @@ function App() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-card">
               <UtensilsCrossed className="h-5 w-5" />
             </span>
             <div>
@@ -322,7 +323,7 @@ function App() {
                   suggestions.map((s) => (
                     <article
                       key={s.name}
-                      className="flex flex-col rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                      className="flex flex-col rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated"
                     >
                       <span className="text-3xl" aria-hidden>
                         {s.emoji}
@@ -394,7 +395,7 @@ function App() {
                   {basket.map((m) => (
                     <div
                       key={m.id}
-                      className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                      className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5 shadow-card"
                     >
                       <span className="text-2xl" aria-hidden>
                         {m.emoji}
@@ -459,7 +460,10 @@ function App() {
               Générer ma liste de courses ({plannedMeals.length} repas)
             </Button>
 
+            {plannedMeals.length > 0 && <NutritionExport meals={plannedMeals} />}
+
             <section className="space-y-6">
+
               <div>
                 <h2 className="text-3xl font-semibold tracking-tight text-foreground">Ta liste de courses</h2>
                 <p className="mt-2 text-base text-muted-foreground">
