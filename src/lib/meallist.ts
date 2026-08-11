@@ -167,11 +167,27 @@ export function save(key: string, value: unknown) {
 }
 
 export const KEYS = {
-  profile: "ml.profile.v3",
-  week: "ml.week.v3",
-  cart: "ml.cart.v3",
-  basket: "ml.basket.v3",
+  profile: "ml.profile.v4",
+  week: "ml.week.v4",
+  cart: "ml.cart.v4",
+  basket: "ml.basket.v4",
+  history: "ml.history.v4",
+  favorites: "ml.favorites.v4",
+  clicked: "ml.clicked.v4",
 };
+
+export type HistoryEntry = {
+  id: string;
+  date: string;
+  people: number;
+  store: StoreId;
+  total: number;
+  meals: { day: string; slot: string; name: string; emoji: string }[];
+  items: CartItem[];
+};
+
+export type Favorite = { name: string; emoji: string; description: string; macros?: Macros };
+
 
 export function cartTotal(items: CartItem[]) {
   return items.reduce((sum, it) => sum + (it.options[it.selected]?.price ?? 0), 0);
