@@ -39,8 +39,12 @@ export type Mode = "fitness" | "classic";
 export type Profile = {
   mode: Mode | null;
   goal: string;
+  goalTarget: string;
   weight: string;
   height: string;
+  sex: string;
+  sessions: string;
+  training: string;
   activity: string;
   diet: string;
   hasAllergies: boolean;
@@ -48,6 +52,7 @@ export type Profile = {
   budget: string;
   timeMax: string;
   cuisines: string[];
+  people: number;
   store: StoreId;
   done: boolean;
 };
@@ -55,26 +60,36 @@ export type Profile = {
 export const emptyProfile: Profile = {
   mode: null,
   goal: "Maintenir",
+  goalTarget: "",
   weight: "",
   height: "",
+  sex: "Homme",
+  sessions: "2-3",
+  training: "Mixte",
   activity: "Modéré",
   diet: "Omnivore",
   hasAllergies: false,
   allergies: "",
-  budget: "Moyen (5-15 €)",
+  budget: "Moyen (50-100 €)",
   timeMax: "30 min",
   cuisines: [],
+  people: 2,
   store: "carrefour",
   done: false,
 };
 
-export const GOALS = ["Prise de masse", "Sèche", "Maintenir"];
+export const GOALS = ["Perte de poids", "Prise de masse", "Sèche", "Maintenir"];
+export const SEXES = ["Homme", "Femme", "Autre"];
+export const SESSIONS = ["0-1", "2-3", "4-5", "6+"];
+export const TRAININGS = ["Force", "Cardio", "HIIT", "Mixte"];
 export const ACTIVITIES = ["Sédentaire", "Modéré", "Actif", "Très actif"];
 export const DIETS_FITNESS = ["Omnivore", "Végétarien", "Végan"];
 export const DIETS_CLASSIC = ["Omnivore", "Végétarien", "Végan", "Sans gluten"];
-export const BUDGETS = ["Cheap (< 5 €)", "Moyen (5-15 €)", "Premium (> 15 €)"];
-export const TIMES = ["5 min", "15 min", "30 min", "1h+"];
-export const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine"];
+export const BUDGETS = ["Cheap (< 50 €)", "Moyen (50-100 €)", "Premium (> 100 €)"];
+export const TIMES = ["5 min", "15 min", "30 min", "1h+", "Pas d'importance"];
+export const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine", "Mixte"];
+export const PEOPLE_PRESETS = [1, 2, 4, 6];
+
 
 export type Macros = {
   calories: string;
