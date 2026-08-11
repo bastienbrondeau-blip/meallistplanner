@@ -35,7 +35,7 @@ const AISLES = [
 
 export const generateIngredients = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => {
-    const d = data as { meals?: unknown; store?: unknown; budget?: unknown };
+    const d = data as { meals?: unknown; store?: unknown; budget?: unknown; people?: unknown };
     if (!d || !Array.isArray(d.meals)) throw new Error("meals must be an array");
     const meals = d.meals.filter((m): m is string => typeof m === "string" && m.trim().length > 0);
     if (meals.length === 0) throw new Error("At least one meal is required");
@@ -43,6 +43,8 @@ export const generateIngredients = createServerFn({ method: "POST" })
       meals,
       store: typeof d.store === "string" ? d.store : "Carrefour",
       budget: typeof d.budget === "string" ? d.budget : "10-15 € par repas",
+      people: typeof d.people === "number" && d.people > 0 ? Math.min(d.people, 12) : 2,
+      allergies: typeof (d as { allergies?: unknown }).allergies === "string" ? String((d as { allergies?: unknown }).allergies) : "",
     };
   })
   .handler(async ({ data }): Promise<GenerateResult> => {
@@ -70,6 +72,8 @@ Règles STRICTES:
 - "aisle" DOIT être exactement l'une de ces valeurs: ${AISLES.join(", ")}.
 - Exactement 3 options par ingrédient, tiers "Standard", "Qualité", "Premium", avec des noms de produits réellement plausibles dans l'enseigne ${data.store} (marque distributeur pour Standard).
 - Prix réalistes en euros, France 2026, cohérents avec un budget ${data.budget}.
+- Quantités calculées pour ${data.people} personne(s) sur toute la semaine.
+${data.allergies ? `- INTERDIT ABSOLU: aucun ingrédient contenant ${data.allergies}. Propose des substituts.` : ""}
 - Pas de sel/poivre/huile sauf si vraiment central.
 - Aucun texte hors JSON.`;
 
@@ -82,7 +86,7 @@ Règles STRICTES:
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Magasin: ${data.store}. Repas: ${data.meals.join(", ")}. Génère les recettes de référence et la liste de courses consolidée.`,
+            content: `Magasin: ${data.store}. Pour ${data.people} personne(s). Repas: ${data.meals.join(", ")}. Génère les recettes de référence et la liste de courses consolidée.`,
           },
         ],
         response_format: { type: "json_object" },

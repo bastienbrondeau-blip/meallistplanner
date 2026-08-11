@@ -11,13 +11,23 @@ export type MealSuggestion = {
 
 export const suggestMeals = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => {
-    const d = (data ?? {}) as { profile?: Record<string, unknown>; slot?: unknown; count?: unknown };
+    const d = (data ?? {}) as {
+      profile?: Record<string, unknown>;
+      slot?: unknown;
+      count?: unknown;
+      complexity?: unknown;
+      people?: unknown;
+    };
     const p = d.profile ?? {};
     const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
     return {
       profile: {
         mode: String(p.mode ?? "classic") === "fitness" ? "fitness" : "classic",
         goal: String(p.goal ?? "Maintenir"),
+        goalTarget: String(p.goalTarget ?? ""),
+        sex: String(p.sex ?? ""),
+        sessions: String(p.sessions ?? ""),
+        training: String(p.training ?? ""),
         weight: String(p.weight ?? ""),
         height: String(p.height ?? ""),
         activity: String(p.activity ?? "Modéré"),
@@ -30,6 +40,8 @@ export const suggestMeals = createServerFn({ method: "POST" })
       },
       slot: typeof d.slot === "string" ? d.slot : "",
       count: typeof d.count === "number" ? Math.min(Math.max(d.count, 4), 21) : 8,
+      complexity: d.complexity === "simple" || d.complexity === "gourmand" ? d.complexity : "",
+      people: typeof d.people === "number" && d.people > 0 ? Math.min(d.people, 12) : 2,
     };
   })
   .handler(async ({ data }): Promise<{ suggestions: MealSuggestion[] }> => {
@@ -49,6 +61,10 @@ Règles:
 - Adapte au budget et au temps de préparation max
 - Tous les ingrédients doivent être trouvables chez ${p.store}
 - description: 6-10 mots max
+- Portions pour ${data.people} personne(s)
+${data.slot ? `- Ce sont des idées pour le moment de la journée: ${data.slot}. Si c'est le petit-déjeuner, propose UNIQUEMENT de vrais petits-déjeuners${fitness ? " riches en protéines (oeufs, skyr, yaourt nature, granola sans sucre, fromage blanc)" : " variés (pain frais, céréales, fruits, confiture, viennoiseries)"}.` : ""}
+${data.complexity === "simple" ? "- Recettes SIMPLES et RAPIDES (moins de 20 min), semaine chargée." : ""}
+${data.complexity === "gourmand" ? "- Recettes PLUS ÉLABORÉES et GOURMANDES (plus de 30 min), ambiance week-end." : ""}
 ${
   fitness
     ? `- Priorise les plats riches en protéines et aux macros équilibrés ("HealthKit"), cohérents avec l'objectif "${p.goal}" (prise de masse = surplus calorique, sèche = déficit et haute protéine)
@@ -59,7 +75,8 @@ ${
 
     const userPrompt = `Profil:
 - Mode: ${fitness ? "Fitness" : "Cuisine classique"}
-${fitness ? `- Objectif: ${p.goal}\n- Poids: ${p.weight || "n/c"} kg\n- Taille: ${p.height || "n/c"} cm\n- Activité: ${p.activity}` : `- Cuisines préférées: ${p.cuisines.length ? p.cuisines.join(", ") : "Toutes"}`}
+- Nombre de personnes: ${data.people}
+${fitness ? `- Objectif: ${p.goal} ${p.goalTarget ? `(${p.goalTarget})` : ""}\n- Sexe: ${p.sex}\n- Séances/semaine: ${p.sessions}\n- Type d'entraînement: ${p.training}\n- Poids: ${p.weight || "n/c"} kg\n- Taille: ${p.height || "n/c"} cm\n- Activité: ${p.activity}` : `- Cuisines préférées: ${p.cuisines.length ? p.cuisines.join(", ") : "Toutes"}`}
 - Régime: ${p.diet}
 - Allergies: ${p.allergies || "Aucune"}
 - Budget par repas: ${p.budget}

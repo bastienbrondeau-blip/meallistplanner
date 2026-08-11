@@ -39,8 +39,12 @@ export type Mode = "fitness" | "classic";
 export type Profile = {
   mode: Mode | null;
   goal: string;
+  goalTarget: string;
   weight: string;
   height: string;
+  sex: string;
+  sessions: string;
+  training: string;
   activity: string;
   diet: string;
   hasAllergies: boolean;
@@ -48,6 +52,7 @@ export type Profile = {
   budget: string;
   timeMax: string;
   cuisines: string[];
+  people: number;
   store: StoreId;
   done: boolean;
 };
@@ -55,26 +60,36 @@ export type Profile = {
 export const emptyProfile: Profile = {
   mode: null,
   goal: "Maintenir",
+  goalTarget: "",
   weight: "",
   height: "",
+  sex: "Homme",
+  sessions: "2-3",
+  training: "Mixte",
   activity: "Modéré",
   diet: "Omnivore",
   hasAllergies: false,
   allergies: "",
-  budget: "Moyen (5-15 €)",
+  budget: "Moyen (50-100 €)",
   timeMax: "30 min",
   cuisines: [],
+  people: 2,
   store: "carrefour",
   done: false,
 };
 
-export const GOALS = ["Prise de masse", "Sèche", "Maintenir"];
+export const GOALS = ["Perte de poids", "Prise de masse", "Sèche", "Maintenir"];
+export const SEXES = ["Homme", "Femme", "Autre"];
+export const SESSIONS = ["0-1", "2-3", "4-5", "6+"];
+export const TRAININGS = ["Force", "Cardio", "HIIT", "Mixte"];
 export const ACTIVITIES = ["Sédentaire", "Modéré", "Actif", "Très actif"];
 export const DIETS_FITNESS = ["Omnivore", "Végétarien", "Végan"];
 export const DIETS_CLASSIC = ["Omnivore", "Végétarien", "Végan", "Sans gluten"];
-export const BUDGETS = ["Cheap (< 5 €)", "Moyen (5-15 €)", "Premium (> 15 €)"];
-export const TIMES = ["5 min", "15 min", "30 min", "1h+"];
-export const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine"];
+export const BUDGETS = ["Cheap (< 50 €)", "Moyen (50-100 €)", "Premium (> 100 €)"];
+export const TIMES = ["5 min", "15 min", "30 min", "1h+", "Pas d'importance"];
+export const CUISINES = ["Italienne", "Asiatique", "Française", "Méditerranéenne", "Mexicaine", "Mixte"];
+export const PEOPLE_PRESETS = [1, 2, 4, 6];
+
 
 export type Macros = {
   calories: string;
@@ -93,11 +108,16 @@ export type Meal = {
 
 export const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 export const SLOTS = [
-  { id: "matin", label: "Matin", hint: "Petit-déjeuner" },
-  { id: "midi", label: "Midi", hint: "Déjeuner" },
-  { id: "soir", label: "Soir", hint: "Dîner" },
+  { id: "matin", label: "Matin", hint: "Petit-déjeuner", emoji: "🌅" },
+  { id: "midi", label: "Midi", hint: "Déjeuner", emoji: "🍽️" },
+  { id: "soir", label: "Soir", hint: "Dîner", emoji: "🌙" },
 ] as const;
 export type SlotId = (typeof SLOTS)[number]["id"];
+
+export const isWeekend = (dayIndex: number) => dayIndex >= 4;
+export const dayDifficulty = (dayIndex: number) =>
+  isWeekend(dayIndex) ? "Gourmand & élaboré (> 30 min)" : "Simple & rapide (< 20 min)";
+
 
 export type Week = Record<string, Meal | undefined>; // key: `${dayIndex}-${slotId}`
 
@@ -152,11 +172,27 @@ export function save(key: string, value: unknown) {
 }
 
 export const KEYS = {
-  profile: "ml.profile.v3",
-  week: "ml.week.v3",
-  cart: "ml.cart.v3",
-  basket: "ml.basket.v3",
+  profile: "ml.profile.v4",
+  week: "ml.week.v4",
+  cart: "ml.cart.v4",
+  basket: "ml.basket.v4",
+  history: "ml.history.v4",
+  favorites: "ml.favorites.v4",
+  clicked: "ml.clicked.v4",
 };
+
+export type HistoryEntry = {
+  id: string;
+  date: string;
+  people: number;
+  store: StoreId;
+  total: number;
+  meals: { day: string; slot: string; name: string; emoji: string }[];
+  items: CartItem[];
+};
+
+export type Favorite = { name: string; emoji: string; description: string; macros?: Macros };
+
 
 export function cartTotal(items: CartItem[]) {
   return items.reduce((sum, it) => sum + (it.options[it.selected]?.price ?? 0), 0);
@@ -181,13 +217,24 @@ export function profileSummary(p: Profile) {
     ["Mode", p.mode === "fitness" ? "Fitness" : "Cuisine classique"],
     ["Régime", p.diet],
     ["Allergies", p.hasAllergies ? p.allergies || "Oui" : "Aucune"],
-    ["Budget", p.budget],
-    ["Temps de prep", p.timeMax],
+    ["Budget par semaine", p.budget],
+    ["Temps de prep max", p.timeMax],
   ];
   if (p.mode === "fitness") {
-    rows.splice(1, 0, ["Objectif", p.goal], ["Poids", p.weight ? `${p.weight} kg` : "—"], ["Taille", p.height ? `${p.height} cm` : "—"], ["Activité", p.activity]);
+    rows.splice(
+      1,
+      0,
+      ["Objectif", p.goal],
+      ["Objectif chiffré", p.goalTarget || "—"],
+      ["Poids", p.weight ? `${p.weight} kg` : "—"],
+      ["Taille", p.height ? `${p.height} cm` : "—"],
+      ["Sexe", p.sex],
+      ["Séances / semaine", p.sessions],
+      ["Type d'entraînement", p.training],
+    );
   } else {
     rows.push(["Cuisines", p.cuisines.length ? p.cuisines.join(", ") : "Toutes"]);
   }
   return rows;
+
 }

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DAYS, SLOTS, type Meal, type SlotId, type Week } from "@/lib/meallist";
+import { DAYS, SLOTS, dayDifficulty, type Meal, type SlotId, type Week } from "@/lib/meallist";
 import { cn } from "@/lib/utils";
 
 export function DayPlanner({
@@ -55,6 +55,9 @@ export function DayPlanner({
             <h3 className="text-3xl font-semibold uppercase tracking-tight text-foreground sm:text-4xl">
               {DAYS[day]}
             </h3>
+            <p className="mt-2 inline-block rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+              {dayDifficulty(day)}
+            </p>
           </div>
           <Button
             variant="ghost"
@@ -74,7 +77,7 @@ export function DayPlanner({
             return (
               <div key={slot.id} className="rounded-2xl border border-border bg-background p-5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary">{slot.label}</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-primary">{slot.emoji} {slot.label}</p>
                   <p className="text-xs text-muted-foreground">{slot.hint}</p>
                 </div>
 
@@ -155,7 +158,7 @@ export function DayPlanner({
               {SLOTS.map((s) => (
                 <span
                   key={s.id}
-                  className={cn("h-1.5 flex-1 rounded-full", week[`${i}-${s.id}`] ? "bg-primary" : "bg-muted")}
+                  className={cn("h-1.5 flex-1 rounded-full", week[`${i}-${s.id}`] ? "bg-primary" : "bg-border")}
                 />
               ))}
             </span>

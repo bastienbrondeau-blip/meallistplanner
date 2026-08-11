@@ -2,14 +2,17 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Dumbbell, Sparkles, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  ACTIVITIES,
   BUDGETS,
   CUISINES,
   DIETS_CLASSIC,
   DIETS_FITNESS,
   GOALS,
+  SESSIONS,
+  SEXES,
   TIMES,
+  TRAININGS,
   profileSummary,
   type Mode,
   type Profile,
@@ -69,154 +72,205 @@ export function Setup({
 
   type Question = { title: string; hint: string; body: React.ReactNode; valid?: boolean };
 
-  const questions: Question[] = [
-    ...(fitness
-      ? [
-          {
-            title: "Quel est ton objectif ?",
-            hint: "On calibre les calories et les protéines de chaque repas sur cet objectif.",
-            body: (
-              <div className="grid gap-3 sm:grid-cols-3">
-                {GOALS.map((g) => (
-                  <Chip key={g} active={p.goal === g} onClick={() => setP({ ...p, goal: g })}>
-                    {g}
-                  </Chip>
-                ))}
-              </div>
-            ),
-          },
-          {
-            title: "Ton poids et ta taille",
-            hint: "Utilisés uniquement pour estimer tes besoins journaliers. Rien ne quitte ton appareil.",
-            body: (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Poids actuel (kg)</p>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={p.weight}
-                    onChange={(e) => setP({ ...p, weight: e.target.value })}
-                    placeholder="ex: 72"
-                    className="h-13 rounded-2xl text-base"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Taille (cm)</p>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={p.height}
-                    onChange={(e) => setP({ ...p, height: e.target.value })}
-                    placeholder="ex: 178"
-                    className="h-13 rounded-2xl text-base"
-                  />
-                </div>
-              </div>
-            ),
-          },
-          {
-            title: "Ton niveau d'activité",
-            hint: "Plus tu bouges, plus les portions proposées seront généreuses.",
-            body: (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {ACTIVITIES.map((a) => (
-                  <Chip key={a} active={p.activity === a} onClick={() => setP({ ...p, activity: a })}>
-                    {a}
-                  </Chip>
-                ))}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    {
-      title: "Quel régime suis-tu ?",
-      hint: "Toutes les suggestions respecteront ce choix, sans exception.",
-      body: (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(fitness ? DIETS_FITNESS : DIETS_CLASSIC).map((d) => (
-            <Chip key={d} active={p.diet === d} onClick={() => setP({ ...p, diet: d })}>
-              {d}
-            </Chip>
-          ))}
+  const allergyQuestion: Question = {
+    title: "Allergies ou intolérances ?",
+    hint: "Les ingrédients concernés seront exclus de tes recettes et de ta liste de courses.",
+    valid: !p.hasAllergies || p.allergies.trim().length > 0,
+    body: (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
+          <Chip active={!p.hasAllergies} onClick={() => setP({ ...p, hasAllergies: false, allergies: "" })}>
+            Non
+          </Chip>
+          <Chip active={p.hasAllergies} onClick={() => setP({ ...p, hasAllergies: true })}>
+            Oui
+          </Chip>
         </div>
-      ),
-    },
-    {
-      title: "Des allergies ou intolérances ?",
-      hint: "Les ingrédients concernés seront exclus de tes recettes et de ta liste.",
-      valid: !p.hasAllergies || p.allergies.trim().length > 0,
-      body: (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
-            <Chip active={!p.hasAllergies} onClick={() => setP({ ...p, hasAllergies: false, allergies: "" })}>
-              Non
-            </Chip>
-            <Chip active={p.hasAllergies} onClick={() => setP({ ...p, hasAllergies: true })}>
-              Oui
-            </Chip>
+        {p.hasAllergies && (
+          <div className="space-y-2">
+            <Textarea
+              value={p.allergies}
+              onChange={(e) => setP({ ...p, allergies: e.target.value })}
+              placeholder="ex: arachides, lactose, fruits de mer, gluten…"
+              className="min-h-28 rounded-2xl text-base"
+            />
+            {!p.allergies.trim() && <p className="text-sm text-destructive">Précise tes allergies pour continuer.</p>}
           </div>
-          {p.hasAllergies && (
-            <div className="space-y-2">
-              <Input
-                value={p.allergies}
-                onChange={(e) => setP({ ...p, allergies: e.target.value })}
-                placeholder="ex: arachides, lactose, fruits de mer…"
-                className="h-13 rounded-2xl text-base"
-              />
-              {!p.allergies.trim() && (
-                <p className="text-sm text-destructive">Précise tes allergies pour continuer.</p>
-              )}
+        )}
+      </div>
+    ),
+  };
+
+  const budgetQuestion: Question = {
+    title: "Budget moyen par semaine ?",
+    hint: "Détermine le niveau des produits proposés dans ta liste de courses.",
+    body: (
+      <div className="grid gap-3 sm:grid-cols-3">
+        {BUDGETS.map((b) => (
+          <Chip key={b} active={p.budget === b} onClick={() => setP({ ...p, budget: b })}>
+            {b}
+          </Chip>
+        ))}
+      </div>
+    ),
+  };
+
+  const timeQuestion: Question = {
+    title: "Temps de préparation max par repas ?",
+    hint: "On écarte les recettes trop longues pour ton quotidien.",
+    body: (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {TIMES.map((t) => (
+          <Chip key={t} active={p.timeMax === t} onClick={() => setP({ ...p, timeMax: t })}>
+            {t}
+          </Chip>
+        ))}
+      </div>
+    ),
+  };
+
+  const questions: Question[] = fitness
+    ? [
+        {
+          title: "Quel est ton objectif ?",
+          hint: "On calibre les calories et les protéines de chaque repas sur cet objectif.",
+          body: (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {GOALS.map((g) => (
+                <Chip key={g} active={p.goal === g} onClick={() => setP({ ...p, goal: g })}>
+                  {g}
+                </Chip>
+              ))}
             </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: "Ton budget par repas",
-      hint: "Détermine le niveau des produits proposés dans ta liste de courses.",
-      body: (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {BUDGETS.map((b) => (
-            <Chip key={b} active={p.budget === b} onClick={() => setP({ ...p, budget: b })}>
-              {b}
-            </Chip>
-          ))}
-        </div>
-      ),
-    },
-    {
-      title: "Combien de temps pour cuisiner ?",
-      hint: "On écarte les recettes trop longues pour ton quotidien.",
-      body: (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {TIMES.map((t) => (
-            <Chip key={t} active={p.timeMax === t} onClick={() => setP({ ...p, timeMax: t })}>
-              {t}
-            </Chip>
-          ))}
-        </div>
-      ),
-    },
-    ...(fitness
-      ? []
-      : [
-          {
-            title: "Tes cuisines préférées",
-            hint: "Choix multiple. Laisse vide pour recevoir de tout.",
-            body: (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {CUISINES.map((c) => (
-                  <Chip key={c} active={p.cuisines.includes(c)} onClick={() => toggleCuisine(c)}>
-                    {c}
-                  </Chip>
-                ))}
-              </div>
-            ),
-          },
-        ]),
-  ];
+          ),
+        },
+        {
+          title: "Objectif chiffré ?",
+          hint: "Facultatif, mais ça aide à doser les portions et le rythme.",
+          body: (
+            <Input
+              value={p.goalTarget}
+              onChange={(e) => setP({ ...p, goalTarget: e.target.value })}
+              placeholder="ex: Gagner 5kg en 3 mois"
+              className="h-13 rounded-2xl text-base"
+            />
+          ),
+        },
+        {
+          title: "Poids actuel (kg) ?",
+          hint: "Utilisé uniquement pour estimer tes besoins. Rien ne quitte ton appareil.",
+          body: (
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={p.weight}
+              onChange={(e) => setP({ ...p, weight: e.target.value })}
+              placeholder="ex: 72"
+              className="h-13 rounded-2xl text-base"
+            />
+          ),
+        },
+        {
+          title: "Taille (cm) ?",
+          hint: "Combinée à ton poids pour estimer ton métabolisme de base.",
+          body: (
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={p.height}
+              onChange={(e) => setP({ ...p, height: e.target.value })}
+              placeholder="ex: 178"
+              className="h-13 rounded-2xl text-base"
+            />
+          ),
+        },
+        {
+          title: "Sexe ?",
+          hint: "Les besoins caloriques moyens diffèrent légèrement.",
+          body: (
+            <div className="grid grid-cols-3 gap-3 sm:max-w-md">
+              {SEXES.map((x) => (
+                <Chip key={x} active={p.sex === x} onClick={() => setP({ ...p, sex: x })}>
+                  {x}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+        {
+          title: "Séances d'entraînement par semaine ?",
+          hint: "Plus tu t'entraînes, plus les portions proposées seront généreuses.",
+          body: (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {SESSIONS.map((x) => (
+                <Chip key={x} active={p.sessions === x} onClick={() => setP({ ...p, sessions: x })}>
+                  {x}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+        {
+          title: "Type d'entraînement ?",
+          hint: "Force = plus de protéines, cardio = plus de glucides.",
+          body: (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {TRAININGS.map((x) => (
+                <Chip key={x} active={p.training === x} onClick={() => setP({ ...p, training: x })}>
+                  {x}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+        allergyQuestion,
+        {
+          title: "Régime alimentaire ?",
+          hint: "Toutes les suggestions respecteront ce choix, sans exception.",
+          body: (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {DIETS_FITNESS.map((d) => (
+                <Chip key={d} active={p.diet === d} onClick={() => setP({ ...p, diet: d })}>
+                  {d}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+        budgetQuestion,
+        timeQuestion,
+      ]
+    : [
+        {
+          title: "Régime alimentaire ?",
+          hint: "Toutes les suggestions respecteront ce choix, sans exception.",
+          body: (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {DIETS_CLASSIC.map((d) => (
+                <Chip key={d} active={p.diet === d} onClick={() => setP({ ...p, diet: d })}>
+                  {d}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+        allergyQuestion,
+        budgetQuestion,
+        timeQuestion,
+        {
+          title: "Cuisines préférées ?",
+          hint: "Choix multiple. Laisse vide pour recevoir de tout.",
+          body: (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {CUISINES.map((c) => (
+                <Chip key={c} active={p.cuisines.includes(c)} onClick={() => toggleCuisine(c)}>
+                  {c}
+                </Chip>
+              ))}
+            </div>
+          ),
+        },
+      ];
 
   const totalQ = questions.length;
   const lastStep = totalQ + 1; // écran de résumé
@@ -286,7 +340,7 @@ export function Setup({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-muted">
       <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-8 sm:px-8 sm:py-12">
         <div className="mb-8 space-y-4">
           <div className="flex items-center justify-between">
@@ -311,7 +365,7 @@ export function Setup({
                 key={i}
                 className={cn(
                   "h-1.5 flex-1 rounded-full transition-all duration-500",
-                  i <= qIndex || !current ? "bg-primary" : "bg-muted",
+                  i <= qIndex || !current ? "bg-primary" : "bg-border",
                 )}
               />
             ))}
@@ -327,9 +381,9 @@ export function Setup({
             </div>
           ) : (
             <div className="rounded-3xl border border-border bg-card p-7 shadow-card sm:p-9">
-              <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">Tout est prêt</h2>
+              <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">Récapitulatif de tes réponses</h2>
               <p className="mt-2.5 text-base text-muted-foreground">
-                Vérifie tes réponses. Tu pourras les modifier à tout moment depuis l'en-tête.
+                Vérifie tes réponses avant de confirmer. Tu pourras les modifier depuis l'en-tête.
               </p>
               <div className="mt-7 divide-y divide-border overflow-hidden rounded-2xl border border-border">
                 {profileSummary(p).map(([k, v]) => (
@@ -345,11 +399,11 @@ export function Setup({
 
         <div className="mt-10 flex items-center justify-between gap-4">
           <Button variant="ghost" className="h-12 rounded-xl" onClick={() => setStep((s) => Math.max(0, s - 1))}>
-            <ChevronLeft className="mr-1 h-4 w-4" /> Retour
+            <ChevronLeft className="mr-1 h-4 w-4" /> {current ? "Retour" : "Modifier"}
           </Button>
           {step < lastStep ? (
             <Button
-              className="h-12 min-w-44 rounded-xl text-base shadow-cta transition-all hover:brightness-90"
+              className="h-12 min-w-44 rounded-xl text-base shadow-cta transition-all hover:brightness-110"
               disabled={!canContinue}
               onClick={() => setStep((s) => s + 1)}
             >
@@ -357,10 +411,10 @@ export function Setup({
             </Button>
           ) : (
             <Button
-              className="h-12 min-w-44 rounded-xl text-base shadow-cta transition-all hover:brightness-90"
+              className="gradient-cta h-12 min-w-44 rounded-xl text-base shadow-cta transition-all hover:brightness-110"
               onClick={() => onDone({ ...p, done: true })}
             >
-              Commencer <Sparkles className="ml-2 h-4 w-4" />
+              Confirmer <Sparkles className="ml-2 h-4 w-4" />
             </Button>
           )}
         </div>
