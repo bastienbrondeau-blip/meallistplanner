@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, ShoppingCart } from "lucide-react";
+import { Plus, RefreshCw, ShoppingCart, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,15 +29,21 @@ export function MealPicker({
   onOpenChange,
   profile,
   slotLabel,
+  complexity,
   onPick,
   onAddToCart,
+  isFavorite,
+  onToggleFavorite,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   profile: Profile;
   slotLabel?: string;
+  complexity?: "simple" | "gourmand";
   onPick: (meal: Meal) => void;
   onAddToCart?: (meal: Meal) => void;
+  isFavorite?: (name: string) => boolean;
+  onToggleFavorite?: (meal: Meal) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +59,8 @@ export function MealPicker({
         data: {
           profile: { ...profile, store: storeById(profile.store)?.name ?? "Carrefour" },
           slot: slotLabel ?? "",
+          complexity: complexity ?? "",
+          people: profile.people,
           count: 8,
         },
       });
@@ -65,9 +73,9 @@ export function MealPicker({
   };
 
   useEffect(() => {
-    if (open && suggestions.length === 0 && !loading) void fetchSuggestions();
+    if (open) void fetchSuggestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, slotLabel, complexity]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -140,6 +148,24 @@ export function MealPicker({
                     </p>
                     {fitness && s.macros && <MacroBadges macros={s.macros} />}
                   </div>
+                  {onToggleFavorite && (
+                    <button
+                      type="button"
+                      aria-label={`Favori ${s.name}`}
+                      onClick={() =>
+                        onToggleFavorite({
+                          id: uid(),
+                          name: s.name,
+                          emoji: s.emoji,
+                          description: s.description,
+                          macros: s.macros,
+                        })
+                      }
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:text-accent"
+                    >
+                      <Star className={isFavorite?.(s.name) ? "h-4 w-4 fill-accent text-accent" : "h-4 w-4"} />
+                    </button>
+                  )}
                 </div>
                 <div className="mt-3 flex gap-2">
                   <Button
