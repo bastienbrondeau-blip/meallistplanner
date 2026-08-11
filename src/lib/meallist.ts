@@ -108,11 +108,16 @@ export type Meal = {
 
 export const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 export const SLOTS = [
-  { id: "matin", label: "Matin", hint: "Petit-déjeuner" },
-  { id: "midi", label: "Midi", hint: "Déjeuner" },
-  { id: "soir", label: "Soir", hint: "Dîner" },
+  { id: "matin", label: "Matin", hint: "Petit-déjeuner", emoji: "🌅" },
+  { id: "midi", label: "Midi", hint: "Déjeuner", emoji: "🍽️" },
+  { id: "soir", label: "Soir", hint: "Dîner", emoji: "🌙" },
 ] as const;
 export type SlotId = (typeof SLOTS)[number]["id"];
+
+export const isWeekend = (dayIndex: number) => dayIndex >= 4;
+export const dayDifficulty = (dayIndex: number) =>
+  isWeekend(dayIndex) ? "Gourmand & élaboré (> 30 min)" : "Simple & rapide (< 20 min)";
+
 
 export type Week = Record<string, Meal | undefined>; // key: `${dayIndex}-${slotId}`
 
