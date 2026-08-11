@@ -212,13 +212,24 @@ export function profileSummary(p: Profile) {
     ["Mode", p.mode === "fitness" ? "Fitness" : "Cuisine classique"],
     ["Régime", p.diet],
     ["Allergies", p.hasAllergies ? p.allergies || "Oui" : "Aucune"],
-    ["Budget", p.budget],
-    ["Temps de prep", p.timeMax],
+    ["Budget par semaine", p.budget],
+    ["Temps de prep max", p.timeMax],
   ];
   if (p.mode === "fitness") {
-    rows.splice(1, 0, ["Objectif", p.goal], ["Poids", p.weight ? `${p.weight} kg` : "—"], ["Taille", p.height ? `${p.height} cm` : "—"], ["Activité", p.activity]);
+    rows.splice(
+      1,
+      0,
+      ["Objectif", p.goal],
+      ["Objectif chiffré", p.goalTarget || "—"],
+      ["Poids", p.weight ? `${p.weight} kg` : "—"],
+      ["Taille", p.height ? `${p.height} cm` : "—"],
+      ["Sexe", p.sex],
+      ["Séances / semaine", p.sessions],
+      ["Type d'entraînement", p.training],
+    );
   } else {
     rows.push(["Cuisines", p.cuisines.length ? p.cuisines.join(", ") : "Toutes"]);
   }
   return rows;
+
 }
